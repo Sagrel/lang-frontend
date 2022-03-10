@@ -1,0 +1,18 @@
+[package]
+name = "lang"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chumsky = "0.8.0"
+ariadne = "0.1.5"
+
+[profile.dev]
+opt-level = 1
+debug = 1
+incremental = true
+
+[profile.release]
+incremental = true

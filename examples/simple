@@ -1,0 +1,7 @@
+a := 35
+b := 34
+
+if a + b == 69 ;
+	print("nice")
+else 
+	print("wat!?")
