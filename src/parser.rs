@@ -63,6 +63,11 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
                 |span| (Ast::Error, span),
             ));
 
+        let while_ = just(Token::While)
+            .ignore_then(expr.clone())
+            .then(block.clone())
+            .map(|(cond, body)| Ast::While(Box::new(cond), Box::new(body)));
+
         let if_ = recursive(|if_| {
             just(Token::If)
                 .ignore_then(expr.clone())
@@ -80,7 +85,10 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
                             Box::new(match b {
                                 Some(b) => b,
                                 // If an `if` expression has no trailing `else` block, we magic up one that just produces ()
-                                None => (Ast::Block(vec![(Ast::Tuple(Vec::new()), span.clone())]), span.clone()),
+                                None => (
+                                    Ast::Block(vec![(Ast::Tuple(Vec::new()), span.clone())]),
+                                    span.clone(),
+                                ),
                             }),
                         ),
                         span,
@@ -95,6 +103,7 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
         let atom = lit
             .or(identifier.map(Ast::Variable))
             .or(tuple.clone())
+            .or(while_)
             .map_with_span(|expr, span| (expr, span))
             .or(block)
             .or(if_)

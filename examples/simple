@@ -1,5 +1,10 @@
-a := 35
-b := 34
+cont := 0
 
-if a + b == 69 //;
-	{ 69 print("nice") } 
+while cont != 69 {
+	cont := cont + 1
+	print("not yet")
+}
+
+if cont == 69 {
+	print("Nice!")
+}

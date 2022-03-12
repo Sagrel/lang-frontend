@@ -69,6 +69,7 @@ pub fn tokenizer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>
         .or(ident)
         .recover_with(skip_then_retry_until([])); // THIS IS ALL THE ERROR RECOVERY CODE. AMAZING!!!
 
+    // TODO This does not always work
     let comment = just("//").then(take_until(just('\n'))).padded();
 
     token
@@ -76,5 +77,5 @@ pub fn tokenizer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>
         .map_with_span(|tok, span| (tok, span))
         .padded()
         .repeated()
-        .then_ignore(end().recover_with(skip_then_retry_until([])))
+        .then_ignore(end().recover_with(skip_then_retry_until([])))  // This is to ensure we reach the EOF
 }

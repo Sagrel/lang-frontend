@@ -61,7 +61,14 @@ impl Display for Ast {
             Ast::Binary(l, op, r) => {
                 write!(f, "({} {} {})", &l.0, op, &r.0)?;
             }
-            Ast::While(_, _) => todo!(),
+            Ast::While(cond, body) => {
+                let body = format!("{}",body.0).replace('\n', "\n\t");
+                write!(
+                    f,
+                    "while {} {{ {} \n}}",
+                    &cond.0, body
+                )?;
+            },
             Ast::If(cond, if_body, else_body) => {
                 let if_body = format!("{}",if_body.0).replace('\n', "\n\t");
                 let else_body = format!("{}",else_body.0).replace('\n', "\n\t");
