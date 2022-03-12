@@ -23,7 +23,7 @@ pub fn parse_with_less_precedence(
         .then(op.then(prev).repeated())
         .foldl(|a, (op, b)| {
             let span = a.1.start..b.1.end;
-            (Ast::Binary(Box::new(a), op, Box::new(b)), span)
+            (Ast::Binary(Box::new(a), op, Box::new(b)), span, None)
         })
 }
 
@@ -50,7 +50,7 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
         let block = expr
             .clone()
             .repeated()
-            .map_with_span(|nodes, span| (Ast::Block(nodes), span))
+            .map_with_span(|nodes, span| (Ast::Block(nodes), span, None))
             .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
             // Attempt to recover anything that looks like a block but contains errors
             .recover_with(nested_delimiters(
@@ -60,7 +60,7 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
                     (Token::Ctrl('('), Token::Ctrl(')')),
                     (Token::Ctrl('['), Token::Ctrl(']')),
                 ],
-                |span| (Ast::Error, span),
+                |span| (Ast::Error, span, None),
             ));
 
         let while_ = just(Token::While)
@@ -86,12 +86,12 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
                                 Some(b) => b,
                                 // If an `if` expression has no trailing `else` block, we magic up one that just produces ()
                                 None => (
-                                    Ast::Block(vec![(Ast::Tuple(Vec::new()), span.clone())]),
-                                    span.clone(),
+                                    Ast::Block(vec![(Ast::Tuple(Vec::new()), span.clone(), None)]),
+                                    span.clone(), None
                                 ),
                             }),
                         ),
-                        span,
+                        span, None
                     )
                 })
         });
@@ -117,7 +117,7 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
             .or(lambda)
             .or(tuple.clone())
             .or(while_)
-            .map_with_span(|expr, span| (expr, span))
+            .map_with_span(|expr, span| (expr, span, None))
             .or(block)
             .or(if_)
             // this is for the case we find 2 * (1 + 3), it should not afect function calls like print("hello world")
@@ -131,7 +131,7 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
                     (Token::Ctrl('['), Token::Ctrl(']')),
                     (Token::Ctrl('{'), Token::Ctrl('}')),
                 ],
-                |span| (Ast::Error, span),
+                |span| (Ast::Error, span, None),
             ))
             // Attempt to recover anything that looks like a list but contains errors
             .recover_with(nested_delimiters(
@@ -141,7 +141,7 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
                     (Token::Ctrl('('), Token::Ctrl(')')),
                     (Token::Ctrl('{'), Token::Ctrl('}')),
                 ],
-                |span| (Ast::Error, span),
+                |span| (Ast::Error, span, None),
             ));
 
         // Function calls have very high precedence so we prioritise them
@@ -150,9 +150,9 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
             .then(tuple.clone())
             .map_with_span(|(caller, args), span| {
                 if let Ast::Tuple(args) = args {
-                    (Ast::Call(Box::new(caller), args), span)
+                    (Ast::Call(Box::new(caller), args), span, None)
                 } else {
-                    (Ast::Error, span)
+                    (Ast::Error, span, None)
                 }
             })
             .or(atom);

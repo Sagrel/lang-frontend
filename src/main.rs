@@ -3,7 +3,10 @@ use std::{env, fs, thread};
 use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
 use chumsky::{Parser, Stream};
 
+use crate::inferer::Inferer;
+
 mod ast;
+mod inferer;
 mod parser;
 mod tokenizer;
 
@@ -19,20 +22,23 @@ fn compile() {
 
     let ast_errors = if let Some(tokens) = tokens {
         /*println!(
-            "{:?}",
-            tokens.iter().map(|(token, _)| token).collect::<Vec<_>>()
-        );
-*/
+                    "{:?}",
+                    tokens.iter().map(|(token, _)| token).collect::<Vec<_>>()
+                );
+        */
         let len = src.chars().count();
         let (ast, ast_errors) = parser::ast_parser()
             .parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
-        if let Some(ast) = ast {
+        if let Some(mut ast) = ast {
             println!(
                 "Generated {} expresions and {} errors",
                 ast.len(),
                 ast_errors.len()
             );
-            ast.iter().for_each(|(node, _)| println!("{}", node));
+            ast.iter().for_each(|(node, _, _)| println!("{}", node));
+            let inferer = Inferer::new();
+            let type_table = inferer.infer(&mut ast);
+            println!("Type list: {:?}", type_table)
         }
         ast_errors
     } else {
@@ -117,10 +123,10 @@ fn compile() {
 
 fn main() {
     let builder = thread::Builder::new()
-                  .name("reductor".into())
-                  .stack_size(32 * 1024 * 1024); // 32MB of stack space
+        .name("compilando con mucha recursion".into())
+        .stack_size(32 * 1024 * 1024); // 32MB of stack space
 
     let handler = builder.spawn(compile).unwrap();
 
-    handler.join().unwrap();    
+    handler.join().unwrap();
 }
