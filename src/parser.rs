@@ -1,39 +1,56 @@
 use chumsky::prelude::*;
 
+use crate::ast::*;
 use crate::tokenizer::*;
 
-pub type Spanned<T> = (T, Span);
-
-#[derive(Debug)]
-pub enum Ast {
-    Error,
-    Literal(Token),
-    Variable(String),
-    Call(
-        Box<Spanned<Self>>,          /* fn */
-        Spanned<Vec<Spanned<Self>>>, /* args */
-    ),
-    Binary(
-        Box<Spanned<Self>>, /* left */
-        &'static str,       /* Operator */
-        Box<Spanned<Self>>, /* right */
-    ),
-    While(
-        Box<Spanned<Self>>, /* condition */
-        Box<Spanned<Self>>, /* while body */
-    ),
-    If(
-        Box<Spanned<Self>>, /* condition */
-        Box<Spanned<Self>>, /* if body */
-        Box<Spanned<Self>>, /* else body */
-    ),
-    Tuple(Vec<Spanned<Self>> /* elems */),
+macro_rules! operators {
+    // Base case just one element
+    ($last:expr) => {
+        just(Token::Op($last.to_string())).to($last)
+    };
+    // $x is the head and ($($y),+) is the tail, that must contain at least 1 elemet (the $y)
+    ($x:expr, $($y:expr),+) => (
+        // Call `find_min!` on the tail `$y`
+        operators!($x).or(operators!($($y),+))
+    )
 }
 
-pub fn ast_parser() -> impl Parser<Token, Vec<Spanned<Ast>>, Error = Simple<Token>> + Clone {
+pub fn parse_with_less_precedence(
+    op: impl Parser<Token, &'static str, Error = Simple<Token>> + Clone,
+    prev: impl Parser<Token, Spanned<Ast>, Error = Simple<Token>> + Clone,
+) -> impl Parser<Token, Spanned<Ast>, Error = Simple<Token>> + Clone {
+    prev.clone()
+        .then(op.then(prev).repeated())
+        .foldl(|a, (op, b)| {
+            let span = a.1.start..b.1.end;
+            (Ast::Binary(Box::new(a), op, Box::new(b)), span)
+        })
+}
+
+pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Token>> + Clone {
     recursive(|expr| {
+        let lit = filter_map(|span, token| match token {
+            Token::Bool(_) | Token::Num(_) | Token::Str(_) => Ok(Ast::Literal(token)),
+            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(token))),
+        })
+        .labelled("literal");
+
+        let identifier = filter_map(|span, token| match token {
+            Token::Ident(ident) => Ok(ident),
+            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(token))),
+        })
+        .labelled("identifier");
+
+        let tuple = expr
+            .clone()
+            .separated_by(just(Token::Ctrl(',')))
+            .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+            .map(Ast::Tuple);
+
         let block = expr
             .clone()
+            .repeated()
+            .map_with_span(|nodes, span| (Ast::Block(nodes), span))
             .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
             // Attempt to recover anything that looks like a block but contains errors
             .recover_with(nested_delimiters(
@@ -46,61 +63,42 @@ pub fn ast_parser() -> impl Parser<Token, Vec<Spanned<Ast>>, Error = Simple<Toke
                 |span| (Ast::Error, span),
             ));
 
-        let if_ = just(Token::If)
-            .ignore_then(expr.clone())
-            .then(expr.clone())
-            .then(
-                just(Token::Else)
-                    .ignore_then(expr.clone())
-                    .or_not(),
-            )
-            .map_with_span(|((cond, a), b), span: Span| {
-                (
-                    Ast::If(
-                        Box::new(cond),
-                        Box::new(a),
-                        Box::new(match b {
-                            Some(b) => b,
-                            // If an `if` expression has no trailing `else` block, we magic up one that just produces ()
-                            None => (Ast::Tuple(Vec::new()), span.clone()),
-                        }),
-                    ),
-                    span,
+        let if_ = recursive(|if_| {
+            just(Token::If)
+                .ignore_then(expr.clone())
+                .then(block.clone())
+                .then(
+                    just(Token::Else)
+                        .ignore_then(block.clone().or(if_))
+                        .or_not(),
                 )
-            });
+                .map_with_span(|((cond, a), b), span: Span| {
+                    (
+                        Ast::If(
+                            Box::new(cond),
+                            Box::new(a),
+                            Box::new(match b {
+                                Some(b) => b,
+                                // If an `if` expression has no trailing `else` block, we magic up one that just produces ()
+                                None => (Ast::Block(vec![(Ast::Tuple(Vec::new()), span.clone())]), span.clone()),
+                            }),
+                        ),
+                        span,
+                    )
+                })
+        });
 
-        let lit = filter_map(|span, token| match token {
-            Token::Bool(_) | Token::Num(_) | Token::Str(_) => Ok(Ast::Literal(token)),
-            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(token))),
-        })
-        .labelled("literal");
-
-        let identifier = filter_map(|span, token| match token {
-            Token::Ident(ident) => Ok(ident.clone()),
-            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(token))),
-        })
-        .labelled("identifier");
-
-        let comma_separated = expr
-            .clone()
-            .chain(just(Token::Ctrl(',')).ignore_then(expr.clone()).repeated())
-            .then_ignore(just(Token::Ctrl(',')).or_not())
-            .or_not()
-            .map(|item| item.unwrap_or_else(Vec::new));
-
-        // TODO asigment?
-
-        let tuple = comma_separated
-            .clone()
-            .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-            .map(Ast::Tuple);
+        // ATOMS ARE NOT AMBIGUOUS
+        // { HELLO } IS AN ATOM BECAUSE IT IS UNAMBIGUOUSLY A BLOCK
+        // 2 + 3 * 3 IS NOT AN ATOM BECAUSE OF OPERATOR PRECEDENCE
 
         let atom = lit
             .or(identifier.map(Ast::Variable))
-            .or(tuple)
+            .or(tuple.clone())
             .map_with_span(|expr, span| (expr, span))
             .or(block)
             .or(if_)
+            // this is for the case we find 2 * (1 + 3), it should not afect function calls like print("hello world")
             .or(expr
                 .clone()
                 .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))) // Attempt to recover anything that looks like a parenthesised expression but contains errors
@@ -126,92 +124,30 @@ pub fn ast_parser() -> impl Parser<Token, Vec<Spanned<Ast>>, Error = Simple<Toke
 
         // Function calls have very high precedence so we prioritise them
         let call = atom
-            .then(
-                comma_separated
-                    .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-                    .map_with_span(|args, span| (args, span))
-                    .repeated(),
-            )
-            .foldl(|f, args| {
-                let span = f.1.start..args.1.end;
-                (Ast::Call(Box::new(f), args), span)
-            });
-
-        // TODO make the following patterns into something better
-
-        // The dot operator has the highest precedence after function call: a.add(b) =>  a . add(b) The add(b) has higher priority
-        let op = just(Token::Op(".".to_string())).to(".");
-        let dot = call
             .clone()
-            .then(op.then(call).repeated())
-            .foldl(|a, (op, b)| {
-                let span = a.1.start..b.1.end;
-                (Ast::Binary(Box::new(a), op, Box::new(b)), span)
-            });
+            .then(tuple.clone())
+            .map_with_span(|(caller, args), span| {
+                if let Ast::Tuple(args) = args {
+                    (Ast::Call(Box::new(caller), args), span)
+                } else {
+                    (Ast::Error, span)
+                }
+            })
+            .or(atom);
 
-        // Product ops (multiply and divide) have equal precedence
-        let op = just(Token::Op("*".to_string()))
-            .to("*")
-            .or(just(Token::Op("/".to_string())).to("/"));
-        let product = dot
-            .clone()
-            .then(op.then(dot).repeated())
-            .foldl(|a, (op, b)| {
-                let span = a.1.start..b.1.end;
-                (Ast::Binary(Box::new(a), op, Box::new(b)), span)
-            });
+        // The dot operator has the highest precedence after function call: a.add(b) =>  a . add(b) The add(b) has higher priorityst(Token::Op(".".to_string())).to(".");
 
-        // Sum ops (add and subtract) have equal precedence
-        let op = just(Token::Op("+".to_string()))
-            .to("+")
-            .or(just(Token::Op("-".to_string())).to("-"));
-        let sum = product
-            .clone()
-            .then(op.then(product).repeated())
-            .foldl(|a, (op, b)| {
-                let span = a.1.start..b.1.end;
-                (Ast::Binary(Box::new(a), op, Box::new(b)), span)
-            });
-
-        // Comparison ops (equal, not-equal) have equal precedence
-        let op = just(Token::Op("==".to_string()))
-            .to("==")
-            .or(just(Token::Op("!=".to_string())).to("!="))
-            .or(just(Token::Op("<".to_string())).to("<"))
-            .or(just(Token::Op("<=".to_string())).to("<="))
-            .or(just(Token::Op(">".to_string())).to(">"))
-            .or(just(Token::Op(">=".to_string())).to(">="));
-        let compare = sum
-            .clone()
-            .then(op.then(sum).repeated())
-            .foldl(|a, (op, b)| {
-                let span = a.1.start..b.1.end;
-                (Ast::Binary(Box::new(a), op, Box::new(b)), span)
-            });
-
-        // Logic ops ("and" and "or") have equal precedence
-        let op = just(Token::Op("and".to_string()))
-            .to("and")
-            .or(just(Token::Op("or".to_string())).to("or"));
-        let logic = compare
-            .clone()
-            .then(op.then(compare).repeated())
-            .foldl(|a, (op, b)| {
-                let span = a.1.start..b.1.end;
-                (Ast::Binary(Box::new(a), op, Box::new(b)), span)
-            });
-
-        // TODO terminar las definiciones
-        let op = just(Token::Op(":=".to_string())).to(":=");
-        let definition = logic
-            .clone()
-            .then(op.then(logic).repeated())
-            .foldl(|a, (op, b)| {
-                let span = a.1.start..b.1.end;
-                (Ast::Binary(Box::new(a), op, Box::new(b)), span)
-            });
+        let dot = parse_with_less_precedence(operators!("."), call);
+        let product = parse_with_less_precedence(operators!("*", "/"), dot);
+        let sum = parse_with_less_precedence(operators!("+", "-"), product);
+        let compare = parse_with_less_precedence(operators!("==", "!=", "<", "<=", ">", ">="), sum);
+        let logic = parse_with_less_precedence(operators!("and", "or"), compare);
+        let definition = parse_with_less_precedence(operators!(":="), logic);
 
         definition
     })
-    .repeated()
+}
+
+pub fn ast_parser() -> impl Parser<Token, Vec<Spanned<Ast>>, Error = Simple<Token>> + Clone {
+    expresion_parser().repeated().then_ignore(end())
 }

@@ -7,11 +7,12 @@ operator ::= "+-*/%><!:".one_of.and_maybe("=") | "."
 
 
 
-atom ::= numeber | string | ident | "(" atom ")" | bool
+atom ::= number | string | ident | "(" atom ")" | bool
 
 expresion ::= atom | call | binay | unary | lambda
 
-tuple ::= "(" (expresion ("," expresion).some).maybe ")"
+block ::= expresion.repeated.delimited_by("(", ")")
+tuple ::= expresion.separated_by(",").delimited_by("(", ")")
 
 binay ::= expresion operator expresion
 unary ::= "-!".one_of expresion

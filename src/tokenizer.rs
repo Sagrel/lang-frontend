@@ -1,5 +1,5 @@
 use chumsky::{
-    prelude::{filter, just, one_of, skip_then_retry_until, take_until, Simple},
+    prelude::{end, filter, just, one_of, skip_then_retry_until, take_until, Simple},
     text::{self, TextParser},
     Parser,
 };
@@ -76,4 +76,5 @@ pub fn tokenizer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>
         .map_with_span(|tok, span| (tok, span))
         .padded()
         .repeated()
+        .then_ignore(end().recover_with(skip_then_retry_until([])))
 }

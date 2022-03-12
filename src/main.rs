@@ -1,26 +1,38 @@
+use std::{env, fs};
+
 use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
 use chumsky::{Parser, Stream};
 
+mod ast;
 mod parser;
 mod tokenizer;
 
 fn main() {
-    let src = include_str!("../examples/simple");
-    let (tokens, token_errors) = tokenizer::tokenizer().parse_recovery(src);
+    let path = if let Some(path) = env::args().nth(1) {
+        path
+    } else {
+        "./examples/simple".to_owned()
+    };
+    let src = fs::read_to_string(path).expect("Unable to read file");
+
+    let (tokens, token_errors) = tokenizer::tokenizer().parse_recovery(src.as_str());
 
     let ast_errors = if let Some(tokens) = tokens {
-        println!(
+        /*println!(
             "{:?}",
             tokens.iter().map(|(token, _)| token).collect::<Vec<_>>()
         );
-        
+*/
         let len = src.chars().count();
         let (ast, ast_errors) = parser::ast_parser()
-             .parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
-
-        if let Some(ast) = ast {            
-            ast.iter().for_each(|(node, _)| println!("{:?}", node)
-        );
+            .parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
+        if let Some(ast) = ast {
+            println!(
+                "Generated {} expresions and {} errors",
+                ast.len(),
+                ast_errors.len()
+            );
+            ast.iter().for_each(|(node, _)| println!("{}", node));
         }
         ast_errors
     } else {
@@ -30,7 +42,11 @@ fn main() {
     token_errors
         .into_iter()
         .map(|e| e.map(|c| c.to_string()))
-        .chain(ast_errors.into_iter().map(|e| e.map(|tk| format!("{:?}", tk))))
+        .chain(
+            ast_errors
+                .into_iter()
+                .map(|e| e.map(|tk| format!("{:?}", tk))),
+        )
         .for_each(|e| {
             let report = Report::build(ReportKind::Error, (), e.span().start);
 
