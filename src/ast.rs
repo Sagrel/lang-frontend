@@ -9,7 +9,7 @@ pub enum Ast {
     Literal(Token),
     Variable(String),
     Call(
-        Box<Spanned<Self>>,          /* fn */
+        Box<Spanned<Self>>, /* fn */
         Vec<Spanned<Self>>, /* args */
     ),
     Binary(
@@ -28,6 +28,10 @@ pub enum Ast {
     ),
     Tuple(Vec<Spanned<Self>> /* elems */),
     Block(Vec<Spanned<Self>> /* elems */),
+    Lambda(
+        Vec<Spanned<Self>>, /* args */
+        Box<Spanned<Self>>, /* body */
+    ),
 }
 
 impl Display for Ast {
@@ -62,16 +66,12 @@ impl Display for Ast {
                 write!(f, "({} {} {})", &l.0, op, &r.0)?;
             }
             Ast::While(cond, body) => {
-                let body = format!("{}",body.0).replace('\n', "\n\t");
-                write!(
-                    f,
-                    "while {} {{ {} \n}}",
-                    &cond.0, body
-                )?;
-            },
+                let body = format!("{}", body.0).replace('\n', "\n\t");
+                write!(f, "while {} {{ {} \n}}", &cond.0, body)?;
+            }
             Ast::If(cond, if_body, else_body) => {
-                let if_body = format!("{}",if_body.0).replace('\n', "\n\t");
-                let else_body = format!("{}",else_body.0).replace('\n', "\n\t");
+                let if_body = format!("{}", if_body.0).replace('\n', "\n\t");
+                let else_body = format!("{}", else_body.0).replace('\n', "\n\t");
                 write!(
                     f,
                     "if {} {{ {} \n}} else {{ {} \n}}",
@@ -90,6 +90,15 @@ impl Display for Ast {
                 for node in nodes {
                     write!(f, "\n{}", &node.0)?;
                 }
+            }
+            Ast::Lambda(args, body) => {
+                let body = format!("{}", body.0).replace('\n', "\n\t");
+                write!(f, "(")?;
+                for arg in args {
+                    write!(f, "{}", &arg.0)?;
+                    write!(f, ",")?;
+                }
+                write!(f, ") => {{ {} \n}}", body)?;
             }
         }
         Ok(())

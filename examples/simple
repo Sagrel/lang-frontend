@@ -1,7 +1,9 @@
 cont := 0
 
+add := (a, b) => { a + b }
+
 while cont != 69 {
-	cont := cont + 1
+	cont := cont.add(1)
 	print("not yet")
 }
 

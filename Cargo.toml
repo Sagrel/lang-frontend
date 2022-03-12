@@ -10,7 +10,7 @@ chumsky = "0.8.0"
 ariadne = "0.1.5"
 
 [profile.dev]
-opt-level = 2
+opt-level = 0
 debug = 1
 incremental = true
 split-debuginfo = "unpacked"

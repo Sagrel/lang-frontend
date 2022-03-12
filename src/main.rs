@@ -1,4 +1,4 @@
-use std::{env, fs};
+use std::{env, fs, thread};
 
 use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
 use chumsky::{Parser, Stream};
@@ -7,7 +7,7 @@ mod ast;
 mod parser;
 mod tokenizer;
 
-fn main() {
+fn compile() {
     let path = if let Some(path) = env::args().nth(1) {
         path
     } else {
@@ -113,4 +113,14 @@ fn main() {
 
             report.finish().eprint(Source::from(&src)).unwrap();
         });
+}
+
+fn main() {
+    let builder = thread::Builder::new()
+                  .name("reductor".into())
+                  .stack_size(32 * 1024 * 1024); // 32MB of stack space
+
+    let handler = builder.spawn(compile).unwrap();
+
+    handler.join().unwrap();    
 }

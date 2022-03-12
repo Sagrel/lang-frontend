@@ -35,7 +35,7 @@ pub fn tokenizer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>
         .map(Token::Str);
 
     // A parser for operators
-    let op = one_of("+-*/=!><:")
+    let op = just("=>").to("=>".to_string()).or(one_of("+-*/=!><:")
         .then(just('=').or_not())
         .map(|(o1, o2)| {
             if let Some(o) = o2 {
@@ -43,7 +43,7 @@ pub fn tokenizer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>
             } else {
                 o1.to_string()
             }
-        })
+        }))
         .or(just(".").to(".".to_string()))
         .map(Token::Op);
 

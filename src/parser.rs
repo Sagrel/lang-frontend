@@ -96,12 +96,25 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
                 })
         });
 
+        let lambda = tuple
+            .clone()
+            .then_ignore(just(Token::Op("=>".to_string())))
+            .then(block.clone())
+            .map(|(args, body)| {
+                if let Ast::Tuple(args) = args {
+                    Ast::Lambda(args, Box::new(body))
+                } else {
+                    Ast::Error
+                }
+            });
+
         // ATOMS ARE NOT AMBIGUOUS
         // { HELLO } IS AN ATOM BECAUSE IT IS UNAMBIGUOUSLY A BLOCK
         // 2 + 3 * 3 IS NOT AN ATOM BECAUSE OF OPERATOR PRECEDENCE
 
         let atom = lit
             .or(identifier.map(Ast::Variable))
+            .or(lambda)
             .or(tuple.clone())
             .or(while_)
             .map_with_span(|expr, span| (expr, span))
