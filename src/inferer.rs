@@ -46,7 +46,7 @@ impl Inferer {
         self.i - 1
     }
 
-	// TODO constraints for declarations, and add them to the env
+    // TODO constraints for declarations, and add them to the env
     fn generate_constraints(&mut self, node: &mut Spanned<Ast>) {
         match &mut node.0 {
             Ast::Literal(l) => match l {
@@ -182,7 +182,9 @@ impl Inferer {
 
                 node.2 = Some(Type::Fn(arg_types, Box::new(return_type)));
             }
-            Ast::Error => unreachable!(),
+            Ast::Error => {
+                node.2 = Some(Type::T(self.next()));
+            }
         }
     }
 

@@ -11,7 +11,7 @@ pub enum Token {
     Bool(bool),
     Num(String),
     Str(String),
-    Op(String), // TODO SPEED make this into a &'static str
+    Op(String), // SPEED make this into a &'static str NOTE: this will be easy when zero-copy branch hits
     Ctrl(char),
     Ident(String),
     While,

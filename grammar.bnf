@@ -24,3 +24,7 @@ if ::= ("if" expresion_or_block).and_maybe("else" expresion_or_block)
 while ::= "while" expresion expresion_or_block
 
 lambda ::= tuple "=>" expresion_or_block
+
+definition ::= expresion ":=" expresion.or(definition)
+
+top-level-definition ::= 
