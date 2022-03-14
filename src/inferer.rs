@@ -11,6 +11,7 @@ pub enum Type {
     Tuple(Vec<Type>),
     T(usize),
     Fn(Vec<Type>, Box<Type>),
+    Error(&'static str),
 }
 
 impl Type {
@@ -24,6 +25,7 @@ pub enum Constraint {
     Eq(Type, Type, Span),
 }
 
+#[derive(Default)]
 pub struct Inferer {
     env: HashMap<String, Type>,
     constraints: Vec<Constraint>,
@@ -32,21 +34,52 @@ pub struct Inferer {
 }
 
 impl Inferer {
-    pub fn new() -> Self {
-        Self {
-            constraints: Vec::new(),
-            errors: Vec::new(),
-            i: 0,
-            env: HashMap::new(),
-        }
-    }
-
     fn next(&mut self) -> usize {
         self.i += 1;
         self.i - 1
     }
 
-    // TODO constraints for declarations, and add them to the env
+    pub fn infer(mut self, nodes: &mut Vec<Spanned<Ast>>) -> Vec<Type> {
+        for node in nodes {
+            self.generate_constraints(node);
+        }
+        let mut substitution_table = vec![None; self.i];
+
+        for constraint in self.constraints.clone().into_iter() {
+            self.unify_one(&mut substitution_table, &constraint)
+        }
+
+        let type_table = substitution_table
+            .into_iter()
+            .map(|e| e.unwrap_or(Type::Error("???")))
+            .collect();
+
+        Inferer::finalize_type_table(type_table)
+    }
+
+    fn finalize_type_table(types: Vec<Type>) -> Vec<Type> {
+        types
+            .iter()
+            .map(|t| Inferer::get_most_concrete_type(t, &types))
+            .collect()
+    }
+
+    fn get_most_concrete_type(t: &Type, types: &[Type]) -> Type {
+        match t {
+            Type::T(next) => Inferer::get_most_concrete_type(&types[*next], types),
+            Type::Fn(args, ret) => {
+                let new_args = args
+                    .iter()
+                    .map(|t| Inferer::get_most_concrete_type(t, types))
+                    .collect();
+                let new_ret = Inferer::get_most_concrete_type(ret, types);
+                Type::Fn(new_args, Box::new(new_ret))
+            }
+            x => x.clone(),
+        }
+    }
+
+    // TODO blocks should create sub envs that get cleared later
     fn generate_constraints(&mut self, node: &mut Spanned<Ast>) {
         match &mut node.0 {
             Ast::Literal(l) => match l {
@@ -83,8 +116,19 @@ impl Inferer {
                 ));
                 node.2 = Some(retur_type);
             }
+            // Handle declarations
+            Ast::Binary(l, ":=", r) => {
+                self.generate_constraints(l);
+                self.generate_constraints(r);
+                self.constraints.push(Constraint::Eq(
+                    l.2.clone().unwrap(),
+                    r.2.clone().unwrap(),
+                    node.1.clone(),
+                ));
+                node.2 = Some(Type::void())
+            }
+            // Transform a.print into print(a), and a.add(b) into add(a,b)
             Ast::Binary(l, ".", r) => {
-                // Transform a.print into print(a), and a.add(b) into add(a,b)
                 // TODO the spans are messed up
                 let l = l.clone();
                 let r = r.clone();
@@ -188,20 +232,6 @@ impl Inferer {
         }
     }
 
-    pub fn infer(mut self, nodes: &mut Vec<Spanned<Ast>>) -> Vec<Type> {
-        for node in nodes {
-            self.generate_constraints(node);
-        }
-        let mut substitution_table = vec![None; self.i];
-
-        // TODO do unification here
-        for constraint in self.constraints.clone().into_iter() {
-            self.unify_one(&mut substitution_table, &constraint)
-        }
-
-        substitution_table.into_iter().map(|e| e.unwrap()).collect()
-    }
-
     fn unify_one(&mut self, substitution_map: &mut Vec<Option<Type>>, constraint: &Constraint) {
         match constraint {
             Constraint::Eq(tx, ty, span) => {
@@ -290,18 +320,18 @@ impl Inferer {
             }
         }
 
-        /*// TODO recursive, non pointer types must be cheked
-        if let Type::Lambda(args, ret) = ty {
-            if self.occurs_check(v, ret) {
+        // TODO recursive, non pointer types must be cheked
+        if let Type::Fn(args, ret) = ty {
+            if Inferer::occurs_check(substitution_table, v, ret) {
                 return true;
             }
 
             for a in args {
-                if self.occurs_check(v, a) {
+                if Inferer::occurs_check(substitution_table, v, a) {
                     return true;
                 }
             }
-        } */
+        }
 
         false
     }

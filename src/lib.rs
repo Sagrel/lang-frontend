@@ -1,7 +1,9 @@
-use std::fs;
+use std::thread;
 
-use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
-use chumsky::{Parser, Stream};
+use ast::{Ast, Spanned};
+use chumsky::{prelude::Simple, Parser, Stream};
+use inferer::Type;
+use tokenizer::{Span, Token};
 
 use crate::inferer::Inferer;
 
@@ -10,108 +12,62 @@ pub mod inferer;
 pub mod parser;
 pub mod tokenizer;
 
-pub fn compile(path: String) {
-    let src = fs::read_to_string(path).expect("Unable to read file");
+type ParseResult = (
+    Option<Vec<(Token, Span)>>,
+    Option<(Vec<Spanned<Ast>>, Vec<Type>)>,
+    Vec<Simple<String>>,
+);
 
-    let (tokens, token_errors) = tokenizer::tokenizer().parse_recovery(src.as_str());
+pub fn parse_file(src: &str) -> ParseResult {
+    let builder = thread::Builder::new()
+        .name("compilando con mucha recursion".into())
+        .stack_size(32 * 1024 * 1024); // 32MB of stack space
+
+    let src = src.to_string();
+
+    let handler = builder.spawn(move || parse(&src)).unwrap();
+
+    handler.join().unwrap()
+}
+
+
+fn parse(
+    src: &str,
+) -> ParseResult {
+    
+
+    let (tokens, token_errors) = tokenizer::tokenizer().parse_recovery(src);
+
+    let mut res_tokens = None;
+    let mut res_ast_and_types = None;
 
     let ast_errors = if let Some(tokens) = tokens {
-        /*println!(
-                    "{:?}",
-                    tokens.iter().map(|(token, _)| token).collect::<Vec<_>>()
-                );
-        */
+ 
+        res_tokens = Some(tokens.clone());
         let len = src.chars().count();
         let (ast, ast_errors) = parser::ast_parser()
             .parse_recovery(Stream::from_iter(len..len + 1, tokens.into_iter()));
+
         if let Some(mut ast) = ast {
-            println!(
-                "Generated {} expresions and {} errors",
-                ast.len(),
-                ast_errors.len()
-            );
-            ast.iter().for_each(|(node, _, _)| println!("{}", node));
-            let inferer = Inferer::new();
+            let inferer = Inferer::default();
+
             let type_table = inferer.infer(&mut ast);
-            println!("Type list: {:?}", type_table)
+            res_ast_and_types =  Some((ast, type_table));
         }
         ast_errors
     } else {
         Vec::new()
     };
 
-    token_errors
+    let errors = token_errors
         .into_iter()
         .map(|e| e.map(|c| c.to_string()))
         .chain(
             ast_errors
                 .into_iter()
                 .map(|e| e.map(|tk| format!("{:?}", tk))),
-        )
-        .for_each(|e| {
-            let report = Report::build(ReportKind::Error, (), e.span().start);
+        ).collect();
 
-            let report = match e.reason() {
-                chumsky::error::SimpleReason::Unclosed { span, delimiter } => report
-                    .with_message(format!(
-                        "Unclosed delimiter {}",
-                        delimiter.fg(Color::Yellow)
-                    ))
-                    .with_label(
-                        Label::new(span.clone())
-                            .with_message(format!(
-                                "Unclosed delimiter {}",
-                                delimiter.fg(Color::Yellow)
-                            ))
-                            .with_color(Color::Yellow),
-                    )
-                    .with_label(
-                        Label::new(e.span())
-                            .with_message(format!(
-                                "Must be closed before this {}",
-                                e.found()
-                                    .unwrap_or(&"end of file".to_string())
-                                    .fg(Color::Red)
-                            ))
-                            .with_color(Color::Red),
-                    ),
-                chumsky::error::SimpleReason::Unexpected => report
-                    .with_message(format!(
-                        "{}, expected one of this: {}",
-                        if e.found().is_some() {
-                            "Unexpected token in input"
-                        } else {
-                            "Unexpected end of input"
-                        },
-                        if e.expected().len() == 0 {
-                            "something else".to_string()
-                        } else {
-                            e.expected()
-                                .map(|expected| match expected {
-                                    Some(expected) => expected.to_string(),
-                                    None => "end of input".to_string(),
-                                })
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        }
-                    ))
-                    .with_label(
-                        Label::new(e.span())
-                            .with_message(format!(
-                                "Unexpected token {}",
-                                e.found()
-                                    .unwrap_or(&"end of file".to_string())
-                                    .fg(Color::Red)
-                            ))
-                            .with_color(Color::Red),
-                    ),
-                chumsky::error::SimpleReason::Custom(msg) => report.with_message(msg).with_label(
-                    Label::new(e.span())
-                        .with_message(format!("{}", msg.fg(Color::Red)))
-                        .with_color(Color::Red),
-                ),
-            };
-
-            report.finish().eprint(Source::from(&src)).unwrap();
-        });
+        
+    (res_tokens, res_ast_and_types, errors)
 }
