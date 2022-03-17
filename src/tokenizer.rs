@@ -35,15 +35,17 @@ pub fn tokenizer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>
         .map(Token::Str);
 
     // A parser for operators
-    let op = just("=>").to("=>".to_string()).or(one_of("+-*/=!><:")
-        .then(just('=').or_not())
-        .map(|(o1, o2)| {
-            if let Some(o) = o2 {
-                format!("{}{}", o1, o)
-            } else {
-                o1.to_string()
-            }
-        }))
+    let op = just("=>")
+        .to("=>".to_string())
+        .or(one_of("+-*/=!><:")
+            .then(just('=').or_not())
+            .map(|(o1, o2)| {
+                if let Some(o) = o2 {
+                    format!("{}{}", o1, o)
+                } else {
+                    o1.to_string()
+                }
+            }))
         .or(just(".").to(".".to_string()))
         .map(Token::Op);
 
@@ -69,13 +71,12 @@ pub fn tokenizer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>
         .or(ident)
         .recover_with(skip_then_retry_until([])); // THIS IS ALL THE ERROR RECOVERY CODE. AMAZING!!!
 
-    // TODO This does not always work
-    let comment = just("//").then(take_until(just('\n'))).padded();
+    let comment = just("//").then(take_until(just('\n').ignored().or(end()))).padded();
 
     token
         .padded_by(comment.repeated())
         .map_with_span(|tok, span| (tok, span))
         .padded()
         .repeated()
-        .then_ignore(end().recover_with(skip_then_retry_until([])))  // This is to ensure we reach the EOF
+        .then_ignore(end().recover_with(skip_then_retry_until([]))) // This is to ensure we reach the EOF
 }

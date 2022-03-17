@@ -5,10 +5,21 @@ use std::fmt::Display;
 pub type Spanned<T> = (T, Span, Option<Type>);
 
 #[derive(Debug, Clone)]
+pub enum Declaration {
+    Complete(Spanned<Ast> /*type */, Spanned<Ast> /*value */),
+    OnlyType(Spanned<Ast> /*type */),
+    OnlyValue(Spanned<Ast> /*value */),
+}
+
+#[derive(Debug, Clone)]
 pub enum Ast {
     Error,
     Literal(Token),
     Variable(String),
+    Declaration(
+        String,           /*name */
+        Box<Declaration>, /*type and value */
+    ),
     Call(
         Box<Spanned<Self>>, /* fn */
         Vec<Spanned<Self>>, /* args */
@@ -33,8 +44,8 @@ pub enum Ast {
         Vec<Spanned<Self>>, /* args */
         Box<Spanned<Self>>, /* body */
     ),
+    // TODO añadir nodo definicion
 }
-
 
 impl Display for Ast {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -102,6 +113,17 @@ impl Display for Ast {
                 }
                 write!(f, ") => {{ {} \n}}", body)?;
             }
+            Ast::Declaration(name, variant) => match variant.as_ref() {
+                Declaration::Complete(ty, value) => {
+                    write!(f, "{} : {} = {}", name, ty.0, value.0)?;
+                }
+                Declaration::OnlyType(ty) => {
+                    write!(f, "{} : {}", name, ty.0)?;
+                }
+                Declaration::OnlyValue(value) => {
+                    write!(f, "{} := {}", name, value.0)?;
+                }
+            },
         }
         Ok(())
     }

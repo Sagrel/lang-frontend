@@ -27,22 +27,82 @@ pub enum Constraint {
 
 #[derive(Default)]
 pub struct Inferer {
-    env: HashMap<String, Type>,
+    env: Vec<(HashMap<String, Type>, bool)>,
     constraints: Vec<Constraint>,
     errors: Vec<(Span, String)>,
     i: usize,
 }
 
 impl Inferer {
+    pub fn new() -> Self {
+        Self {
+            env: vec![(HashMap::new(), false)],
+            ..Default::default()
+        }
+    }
+
     fn next(&mut self) -> usize {
         self.i += 1;
         self.i - 1
     }
 
-    pub fn infer(mut self, nodes: &mut Vec<Spanned<Ast>>) -> Vec<Type> {
-        for node in nodes {
-            self.generate_constraints(node);
+    fn find_declared(&self, name: &str) -> Option<Type> {
+        let mut idx = self.env.len() - 1;
+        loop {
+            if let Some(t) = self.env[idx].0.get(name) {
+                return Some(t.clone());
+            } else if self.env[idx].1 {
+                idx -= 1;
+            } else {
+                return self.env[0].0.get(name).cloned()
+            }
         }
+    }
+
+    pub fn infer(mut self, nodes: &mut Vec<Spanned<Ast>>) -> (Vec<Type>, Vec<(Span, String)>) {
+        let declared: Vec<_> = nodes
+            .iter_mut()
+            .filter_map(|node| {
+                node.2 = Some(Type::void());
+                match &mut node.0 {
+                    Ast::Declaration(name, variant) => {
+                        let t = Type::T(self.next());
+                        self.env
+                            .last_mut()
+                            .unwrap()
+                            .0
+                            .insert(name.clone(), t.clone());
+                        Some((t, variant.as_mut(), node.1.clone()))
+                    }
+                    _ => {
+                        self.errors.push((
+                            node.1.clone(),
+                            "Only declarations are suported at top level".to_owned(),
+                        ));
+                        None
+                    }
+                }
+            })
+            .collect();
+        for (expected, variant, span) in declared {
+            match variant {
+                Declaration::Complete(_, value) => {
+                    // TODO Don't ignore types
+                    self.generate_constraints(value);
+                    self.constraints
+                        .push(Constraint::Eq(expected, value.2.clone().unwrap(), span))
+                }
+                Declaration::OnlyType(_) => {
+                    // TODO Don't ignore types
+                }
+                Declaration::OnlyValue(value) => {
+                    self.generate_constraints(value);
+                    self.constraints
+                        .push(Constraint::Eq(expected, value.2.clone().unwrap(), span))
+                }
+            }
+        }
+
         let mut substitution_table = vec![None; self.i];
 
         for constraint in self.constraints.clone().into_iter() {
@@ -54,9 +114,10 @@ impl Inferer {
             .map(|e| e.unwrap_or(Type::Error("???")))
             .collect();
 
-        Inferer::finalize_type_table(type_table)
+        (Inferer::finalize_type_table(type_table), self.errors)
     }
 
+    // TODO optimizar esto para no copiar tanto o exponer get_most_concrete_type en la api
     fn finalize_type_table(types: Vec<Type>) -> Vec<Type> {
         types
             .iter()
@@ -79,7 +140,7 @@ impl Inferer {
         }
     }
 
-    // TODO blocks should create sub envs that get cleared later
+    // TODO blocks should create sub envs that get cleared later. No closures yet, only access to top-level definitions and scoped definitions for lambdas, but blocks can access things from parent scope, only lambdas constitute a brand new env of definitions
     fn generate_constraints(&mut self, node: &mut Spanned<Ast>) {
         match &mut node.0 {
             Ast::Literal(l) => match l {
@@ -89,11 +150,20 @@ impl Inferer {
                 _ => unreachable!(),
             },
             Ast::Variable(name) => {
-                node.2 = if let Some(t) = self.env.get(name) {
-                    Some(t.clone())
+                node.2 = if let Some(t) = self.find_declared(name) {
+                    Some(t)
                 } else {
+                    self.errors.push((
+                        node.1.clone(),
+                        format!("The variable '{}' is not defined", name),
+                    ));
+                    // TODO investigar que pase si quito esto
                     let t = Type::T(self.next());
-                    self.env.insert(name.clone(), t.clone());
+                    self.env
+                        .last_mut()
+                        .unwrap()
+                        .0
+                        .insert(name.clone(), t.clone());
                     Some(t)
                 }
             }
@@ -115,17 +185,6 @@ impl Inferer {
                     node.1.clone(),
                 ));
                 node.2 = Some(retur_type);
-            }
-            // Handle declarations
-            Ast::Binary(l, ":=", r) => {
-                self.generate_constraints(l);
-                self.generate_constraints(r);
-                self.constraints.push(Constraint::Eq(
-                    l.2.clone().unwrap(),
-                    r.2.clone().unwrap(),
-                    node.1.clone(),
-                ));
-                node.2 = Some(Type::void())
             }
             // Transform a.print into print(a), and a.add(b) into add(a,b)
             Ast::Binary(l, ".", r) => {
@@ -151,6 +210,7 @@ impl Inferer {
                 ));
                 let t = Type::T(self.next());
                 node.2 = Some(t);
+                // TODO este warning es falso, desactivarlo
                 let res_type = match op.as_ref() {
                     "<" | "<=" | ">=" | ">" | "==" | "!=" | "and" | "or" => Type::Bool,
                     _ => l.2.clone().unwrap(),
@@ -204,6 +264,7 @@ impl Inferer {
                 node.2 = Some(Type::Tuple(arg_types));
             }
             Ast::Block(args) => {
+                self.env.push((HashMap::new(), true));
                 for arg in args.iter_mut() {
                     self.generate_constraints(arg)
                 }
@@ -211,12 +272,18 @@ impl Inferer {
                     t.clone()
                 } else {
                     Some(Type::void())
-                }
+                };
+                self.env.pop();
             }
             Ast::Lambda(args, body) => {
+                self.env.push((HashMap::new(), false));
                 let arg_types = args
                     .iter_mut()
                     .map(|arg| {
+                        if let Ast::Variable(name) = &arg.0 {
+                            let t = Type::T(self.next());
+                            self.env.last_mut().unwrap().0.insert(name.clone(), t);
+                        }
                         self.generate_constraints(arg);
                         arg.2.clone().unwrap()
                     })
@@ -225,9 +292,44 @@ impl Inferer {
                 let return_type = body.2.clone().unwrap();
 
                 node.2 = Some(Type::Fn(arg_types, Box::new(return_type)));
+                self.env.pop();
             }
             Ast::Error => {
                 node.2 = Some(Type::T(self.next()));
+            }
+            // TODO should declarations return the value?
+            // TODO need node to type = (Ast) -> Option<Type>
+            // TODO Should we convert al declarations to full declarations?
+            Ast::Declaration(name, variant) => {
+                node.2 = Some(Type::void());
+                let expected = Type::T(self.next());
+                self.env
+                    .last_mut()
+                    .unwrap()
+                    .0
+                    .insert(name.clone(), expected.clone());
+                match variant.as_mut() {
+                    Declaration::Complete(_, value) => {
+                        // TODO Don't ignore types
+                        self.generate_constraints(value);
+                        self.constraints.push(Constraint::Eq(
+                            expected,
+                            value.2.clone().unwrap(),
+                            node.1.clone(),
+                        ))
+                    }
+                    Declaration::OnlyType(_) => {
+                        // TODO Don't ignore types
+                    }
+                    Declaration::OnlyValue(value) => {
+                        self.generate_constraints(value);
+                        self.constraints.push(Constraint::Eq(
+                            expected,
+                            value.2.clone().unwrap(),
+                            node.1.clone(),
+                        ))
+                    }
+                }
             }
         }
     }

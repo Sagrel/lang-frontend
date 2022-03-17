@@ -75,7 +75,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "lang"
+name = "lang-frontend"
 version = "0.1.0"
 dependencies = [
  "ariadne",

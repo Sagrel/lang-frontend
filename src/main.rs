@@ -1,7 +1,7 @@
 use std::{env, fs};
 
 use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
-use lang::*;
+use lang_frontend::*;
 
 fn main() {
     let path = if let Some(path) = env::args().nth(1) {
