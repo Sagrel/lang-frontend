@@ -2,25 +2,9 @@ use std::collections::HashMap;
 
 use crate::ast::*;
 use crate::tokenizer::*;
+use crate::types::Type;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Type {
-    String,
-    Number,
-    Bool,
-    Tuple(Vec<Type>),
-    T(usize),
-    Fn(Vec<Type>, Box<Type>),
-    Error(&'static str),
-}
-
-impl Type {
-    pub fn void() -> Type {
-        Type::Tuple(Vec::new())
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Constraint {
     Eq(Type, Type, Span),
 }
@@ -54,7 +38,7 @@ impl Inferer {
             } else if self.env[idx].1 {
                 idx -= 1;
             } else {
-                return self.env[0].0.get(name).cloned()
+                return self.env[0].0.get(name).cloned();
             }
         }
     }
@@ -95,7 +79,7 @@ impl Inferer {
                 Declaration::OnlyType(_) => {
                     // TODO Don't ignore types
                 }
-                Declaration::OnlyValue(value) => {
+                Declaration::OnlyValue(value, _) => {
                     self.generate_constraints(value);
                     self.constraints
                         .push(Constraint::Eq(expected, value.2.clone().unwrap(), span))
@@ -125,7 +109,7 @@ impl Inferer {
             .collect()
     }
 
-    fn get_most_concrete_type(t: &Type, types: &[Type]) -> Type {
+    pub fn get_most_concrete_type(t: &Type, types: &[Type]) -> Type {
         match t {
             Type::T(next) => Inferer::get_most_concrete_type(&types[*next], types),
             Type::Fn(args, ret) => {
@@ -135,6 +119,13 @@ impl Inferer {
                     .collect();
                 let new_ret = Inferer::get_most_concrete_type(ret, types);
                 Type::Fn(new_args, Box::new(new_ret))
+            }
+            Type::Tuple(args) => {
+                let new_args = args
+                    .iter()
+                    .map(|t| Inferer::get_most_concrete_type(t, types))
+                    .collect();
+                Type::Tuple(new_args)
             }
             x => x.clone(),
         }
@@ -321,7 +312,7 @@ impl Inferer {
                     Declaration::OnlyType(_) => {
                         // TODO Don't ignore types
                     }
-                    Declaration::OnlyValue(value) => {
+                    Declaration::OnlyValue(value, _) => {
                         self.generate_constraints(value);
                         self.constraints.push(Constraint::Eq(
                             expected,
@@ -343,7 +334,7 @@ impl Inferer {
                         if Inferer::occurs_check(substitution_map, n, &ty) {
                             return self.errors.push((
                                 span.clone(),
-                                format!("Recursive types are not allowed, {:?} is in {:?}", tx, ty),
+                                format!("Recursive types are not allowed, {} is in {}", tx, ty),
                             ));
                         }
                     }
@@ -381,7 +372,7 @@ impl Inferer {
                         _ => {
                             return self
                                 .errors
-                                .push((span.clone(), format!("Expected {:?}, got {:?}", tx, ty)))
+                                .push((span.clone(), format!("Expected {}, got {}", tx, ty)))
                         }
                     }
                 }

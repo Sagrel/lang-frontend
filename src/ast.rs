@@ -1,5 +1,5 @@
-use crate::inferer::*;
 use crate::tokenizer::*;
+use crate::types::Type;
 use std::fmt::Display;
 
 pub type Spanned<T> = (T, Span, Option<Type>);
@@ -8,7 +8,10 @@ pub type Spanned<T> = (T, Span, Option<Type>);
 pub enum Declaration {
     Complete(Spanned<Ast> /*type */, Spanned<Ast> /*value */),
     OnlyType(Spanned<Ast> /*type */),
-    OnlyValue(Spanned<Ast> /*value */),
+    OnlyValue(
+        Spanned<Ast>, /*value */
+        Span,         /* The := span for inlay_hints */
+    ),
 }
 
 #[derive(Debug, Clone)]
@@ -120,7 +123,7 @@ impl Display for Ast {
                 Declaration::OnlyType(ty) => {
                     write!(f, "{} : {}", name, ty.0)?;
                 }
-                Declaration::OnlyValue(value) => {
+                Declaration::OnlyValue(value, _) => {
                     write!(f, "{} := {}", name, value.0)?;
                 }
             },

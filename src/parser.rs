@@ -154,6 +154,16 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
                 ],
                 |span| (Ast::Error, span, None),
             ))
+            .recover_with(nested_delimiters(
+                Token::Ctrl('{'),
+                Token::Ctrl('}'),
+                [
+                    (Token::Ctrl('('), Token::Ctrl(')')),
+                    (Token::Ctrl('['), Token::Ctrl(']')),
+                ],
+                |span| (Ast::Error, span, None),
+            ))
+            .recover_with(skip_then_retry_until([Token::Ctrl(')'),Token::Ctrl(']'),Token::Ctrl('}')]))
             .boxed();
 
         // Function calls have very high precedence so we prioritise them
@@ -167,6 +177,7 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
                     (Ast::Error, span, None)
                 }
             })
+            // atom is later because otherwhise add(1,2) would be parsed as add:identifier, (1,2):tuple
             .or(atom)
             .boxed();
 
@@ -188,10 +199,10 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
             });
         let only_value = identifier
             .clone()
-            .then_ignore(just(Token::Op(":=".to_string())))
+            .then(just(Token::Op(":=".to_string())).map_with_span(|_,span| span))
             .then(expr.clone())
-            .map(|(name, value)| {
-                Ast::Declaration(name, Box::new(Declaration::OnlyValue(value)))
+            .map(|((name, span), value)| {
+                Ast::Declaration(name, Box::new(Declaration::OnlyValue(value, span)))
             });
         let complete = identifier
             .clone()

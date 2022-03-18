@@ -1,8 +1,8 @@
-
-
+tuple := (df, "hola")
+df := 12
 main := () => {
 
-	1 + 2.add( 3)
+	a := 1 + 2.add(df) 
 
 	//while cont != 69 {
 	//	cont := cont.add(1)
@@ -13,8 +13,6 @@ main := () => {
 	//	print("Nice!")
 	//}
 }
-
-
 
 
 add := (a, b) => { a + b }

@@ -2,13 +2,14 @@ use std::thread;
 
 use ast::{Ast, Spanned};
 use chumsky::{prelude::Simple, Parser, Stream};
-use inferer::Type;
+use types::Type;
 use tokenizer::{Span, Token};
 
 use crate::inferer::Inferer;
 
 pub mod ast;
 pub mod inferer;
+pub mod types;
 pub mod parser;
 pub mod tokenizer;
 
