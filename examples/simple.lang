@@ -2,6 +2,12 @@ tuple := (df, "hola")
 df := 12
 main := () => {
 
+	{
+	 	internal := 2
+	}
+
+	external := internal
+
 	a := 1 + 2.add(df) 
 
 	//while cont != 69 {
@@ -14,5 +20,5 @@ main := () => {
 	//}
 }
 
-
+ 
 add := (a, b) => { a + b }

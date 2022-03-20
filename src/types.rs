@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 #[derive(Debug,Clone, PartialEq)]
 pub enum Type {
-    String,
+    Text,
     Number,
     Bool,
     Tuple(Vec<Type>),
@@ -20,7 +20,7 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::String => write!(f, "Text"),
+            Type::Text => write!(f, "Text"),
             Type::Number => write!(f, "Number"),
             Type::Bool => write!(f, "Bool"),
             Type::Tuple(args) => {

@@ -28,10 +28,11 @@ pub fn parse_with_less_precedence(
         })
 }
 
+// TODO Make this more error resistant. Unclosed { fucks everything up
 pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Token>> + Clone {
     recursive(|expr| {
         let lit = filter_map(|span, token| match token {
-            Token::Bool(_) | Token::Num(_) | Token::Str(_) => Ok(Ast::Literal(token)),
+            Token::Bool(_) | Token::Number(_) | Token::Text(_) => Ok(Ast::Literal(token)),
             _ => Err(Simple::expected_input_found(span, Vec::new(), Some(token))),
         })
         .labelled("literal")

@@ -47,7 +47,6 @@ pub enum Ast {
         Vec<Spanned<Self>>, /* args */
         Box<Spanned<Self>>, /* body */
     ),
-    // TODO añadir nodo definicion
 }
 
 impl Display for Ast {
@@ -59,10 +58,10 @@ impl Display for Ast {
                     Token::Bool(b) => {
                         write!(f, "{}", b)?;
                     }
-                    Token::Num(n) => {
+                    Token::Number(n) => {
                         write!(f, "{}", n)?;
                     }
-                    Token::Str(s) => {
+                    Token::Text(s) => {
                         write!(f, "\"{}\"", s)?;
                     }
                     _ => panic!("This should always be a literal"),

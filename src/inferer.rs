@@ -101,7 +101,7 @@ impl Inferer {
         (Inferer::finalize_type_table(type_table), self.errors)
     }
 
-    // TODO optimizar esto para no copiar tanto o exponer get_most_concrete_type en la api
+    // SPEED optimizar esto para no copiar tanto o exponer get_most_concrete_type en la api
     fn finalize_type_table(types: Vec<Type>) -> Vec<Type> {
         types
             .iter()
@@ -131,13 +131,12 @@ impl Inferer {
         }
     }
 
-    // TODO blocks should create sub envs that get cleared later. No closures yet, only access to top-level definitions and scoped definitions for lambdas, but blocks can access things from parent scope, only lambdas constitute a brand new env of definitions
     fn generate_constraints(&mut self, node: &mut Spanned<Ast>) {
         match &mut node.0 {
             Ast::Literal(l) => match l {
                 Token::Bool(_) => node.2 = Some(Type::Bool),
-                Token::Str(_) => node.2 = Some(Type::String),
-                Token::Num(_) => node.2 = Some(Type::Number),
+                Token::Text(_) => node.2 = Some(Type::Text),
+                Token::Number(_) => node.2 = Some(Type::Number),
                 _ => unreachable!(),
             },
             Ast::Variable(name) => {
@@ -289,7 +288,7 @@ impl Inferer {
                 node.2 = Some(Type::T(self.next()));
             }
             // TODO should declarations return the value?
-            // TODO need node to type = (Ast) -> Option<Type>
+            // TODO need auxiliary function Node to Type = (Ast) -> Option<Type>
             // TODO Should we convert al declarations to full declarations?
             Ast::Declaration(name, variant) => {
                 node.2 = Some(Type::void());

@@ -9,9 +9,9 @@ pub type Span = std::ops::Range<usize>;
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub enum Token {
     Bool(bool),
-    Num(String),
-    Str(String),
-    Op(String), // SPEED make this into a &'static str NOTE: this will be easy when zero-copy branch hits
+    Number(String),
+    Text(String),
+    Op(String), // SPEED make this into a &'static str NOTE: this will be easy when zero-copy branch lands
     Ctrl(char),
     Ident(String),
     While,
@@ -25,14 +25,14 @@ pub fn tokenizer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>
         .chain::<char, _, _>(just('.').chain(text::digits(10)).or_not().flatten())
         .collect::<String>()
         //.map(|n| n.parse().unwrap())
-        .map(Token::Num);
+        .map(Token::Number);
 
     // A parser for strings
     let str_ = just('"')
         .ignore_then(filter(|c| *c != '"').repeated())
         .then_ignore(just('"'))
         .collect::<String>()
-        .map(Token::Str);
+        .map(Token::Text);
 
     // A parser for operators
     let op = just("=>")
