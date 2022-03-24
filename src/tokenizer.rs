@@ -4,9 +4,7 @@ use chumsky::{
     Parser,
 };
 
-use crate::token::{Token, Spanned};
-
-
+use crate::token::{Spanned, Token};
 
 pub fn tokenizer() -> impl Parser<char, Vec<Spanned<Token>>, Error = Simple<char>> {
     // A parser for numbers
@@ -62,12 +60,12 @@ pub fn tokenizer() -> impl Parser<char, Vec<Spanned<Token>>, Error = Simple<char
 
     let comment = just("//")
         .then(take_until(just('\n').ignored().or(end())))
+        .map_with_span(|(_, (s, _)), span| (Token::Comment(s.iter().collect::<String>()), span))
         .padded();
 
-    token
-        .padded_by(comment.repeated())
-        .map_with_span(|tok, span| (tok, span))
+    comment
         .padded()
+        .or(token.map_with_span(|tok, span| (tok, span)).padded())
         .repeated()
         .then_ignore(end().recover_with(skip_then_retry_until([]))) // This is to ensure we reach the EOF
 }

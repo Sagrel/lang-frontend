@@ -328,6 +328,7 @@ impl Inferer {
                     }
                 }
             }
+            Ast::Coment(_) => (),
         }
     }
 

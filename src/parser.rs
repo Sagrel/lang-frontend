@@ -237,7 +237,14 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
             .or(only_value)
             .map_with_span(|node, span| (node, span, None));
 
-        definition.or(logic)
+        let comment = filter_map(|span, tk| match &tk {
+            Token::Comment(_) => Ok(Ast::Coment((tk, span))),
+            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tk))),
+        })
+        .labelled("identifier")
+        .boxed().map_with_span(|c,span| (c, span, None));
+
+        definition.or(logic).or(comment)
     })
 }
 

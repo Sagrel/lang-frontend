@@ -16,6 +16,7 @@ pub enum Declaration {
 #[derive(Debug, Clone)]
 pub enum Ast {
     Error,
+    Coment(Spanned<Token>),
     Literal(Spanned<Token>),
     Variable(Spanned<Token>),
     Declaration(
@@ -129,6 +130,9 @@ impl Display for Ast {
                     write!(f, "{} := {}", name, value.0)?;
                 }
             },
+            Ast::Coment((tk,_)) => {
+                    write!(f, "{}", tk)?;
+                }
         }
         Ok(())
     }

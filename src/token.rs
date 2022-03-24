@@ -5,6 +5,7 @@ pub enum Token {
     Bool(bool),
     Number(String),
     Text(String),
+    Comment(String),
     Op(String), // SPEED make this into a &'static str NOTE: this will be easy when zero-copy branch lands
     Ctrl(char),
     Ident(String),
@@ -19,6 +20,7 @@ impl Display for Token {
             Token::Bool(b) => write!(f, "{}", b),
             Token::Number(n) => write!(f, "{}", n),
             Token::Text(t) => write!(f, "{}", t),
+            Token::Comment(t) => write!(f, "//{}", t),
             Token::Op(o) => write!(f, "{}", o),
             Token::Ctrl(c) => write!(f, "{}", c),
             Token::Ident(i) => write!(f, "{}", i),
