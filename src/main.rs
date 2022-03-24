@@ -7,7 +7,7 @@ fn main() {
     let path = if let Some(path) = env::args().nth(1) {
         path
     } else {
-        "./examples/simple".to_owned()
+        "./examples/simple.lang".to_owned()
     };
 
     let src = fs::read_to_string(path).expect("Unable to read file");

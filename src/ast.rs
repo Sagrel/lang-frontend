@@ -1,51 +1,54 @@
-use crate::tokenizer::*;
-use crate::types::Type;
+use crate::{token::*, types::Type};
 use std::fmt::Display;
 
-pub type Spanned<T> = (T, Span, Option<Type>);
+pub type Anotated<T> = (T, Span, Option<Type>);
 
 #[derive(Debug, Clone)]
 pub enum Declaration {
-    Complete(Spanned<Ast> /*type */, Spanned<Ast> /*value */),
-    OnlyType(Spanned<Ast> /*type */),
+    Complete(Anotated<Ast> /*type */, Anotated<Ast> /*value */),
+    OnlyType(Anotated<Ast> /*type */),
     OnlyValue(
-        Spanned<Ast>, /*value */
-        Span,         /* The := span for inlay_hints */
+        Anotated<Ast>, /*value */
+        Span,          /* The := span for inlay_hints */
     ),
 }
 
 #[derive(Debug, Clone)]
 pub enum Ast {
     Error,
-    Literal(Token),
-    Variable(String),
+    Literal(Spanned<Token>),
+    Variable(Spanned<Token>),
     Declaration(
-        String,           /*name */
+        Spanned<Token>,   /*name */
         Box<Declaration>, /*type and value */
     ),
     Call(
-        Box<Spanned<Self>>, /* fn */
-        Vec<Spanned<Self>>, /* args */
+        Box<Anotated<Self>>, /* fn */
+        Vec<Anotated<Self>>, /* args */
     ),
     Binary(
-        Box<Spanned<Self>>, /* left */
-        &'static str,       /* Operator */
-        Box<Spanned<Self>>, /* right */
+        Box<Anotated<Self>>, /* left */
+        Spanned<Token>,      /* Operator Spanned<Token>*/
+        Box<Anotated<Self>>, /* right */
     ),
     While(
-        Box<Spanned<Self>>, /* condition */
-        Box<Spanned<Self>>, /* while body */
+        Spanned<Token>,      /* while Spanned<Token> */
+        Box<Anotated<Self>>, /* condition */
+        Box<Anotated<Self>>, /* while body */
     ),
     If(
-        Box<Spanned<Self>>, /* condition */
-        Box<Spanned<Self>>, /* if body */
-        Box<Spanned<Self>>, /* else body */
+        Spanned<Token>,         /* if Spanned<Token> */
+        Box<Anotated<Self>>,    /* condition */
+        Box<Anotated<Self>>,    /* if body */
+        Option<Spanned<Token>>, /* else Spanned<Token> */
+        Box<Anotated<Self>>,    /* else body */
     ),
-    Tuple(Vec<Spanned<Self>> /* elems */),
-    Block(Vec<Spanned<Self>> /* elems */),
+    Tuple(Vec<Anotated<Self>> /* elems */),
+    Block(Vec<Anotated<Self>> /* elems */),
     Lambda(
-        Vec<Spanned<Self>>, /* args */
-        Box<Spanned<Self>>, /* body */
+        Vec<Anotated<Self>>, /* args */
+        Spanned<Token>,      /* Arrow token */
+        Box<Anotated<Self>>, /* body */
     ),
 }
 
@@ -53,7 +56,7 @@ impl Display for Ast {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Ast::Error => write!(f, "¡Error!")?,
-            Ast::Literal(l) => {
+            Ast::Literal((l, _)) => {
                 match l {
                     Token::Bool(b) => {
                         write!(f, "{}", b)?;
@@ -67,7 +70,7 @@ impl Display for Ast {
                     _ => panic!("This should always be a literal"),
                 };
             }
-            Ast::Variable(name) => write!(f, "{}", name)?,
+            Ast::Variable((name, _)) => write!(f, "{}", name)?,
             Ast::Call(name, args) => {
                 write!(f, "{}", &name.0)?;
                 write!(f, "(")?;
@@ -77,14 +80,14 @@ impl Display for Ast {
                 }
                 write!(f, ")")?;
             }
-            Ast::Binary(l, op, r) => {
-                write!(f, "({} {} {})", &l.0, op, &r.0)?;
+            Ast::Binary(l, (op_tk, _), r) => {
+                write!(f, "({} {} {})", &l.0, op_tk, &r.0)?;
             }
-            Ast::While(cond, body) => {
+            Ast::While(_, cond, body) => {
                 let body = format!("{}", body.0).replace('\n', "\n\t");
                 write!(f, "while {} {{ {} \n}}", &cond.0, body)?;
             }
-            Ast::If(cond, if_body, else_body) => {
+            Ast::If(_, cond, if_body, _, else_body) => {
                 let if_body = format!("{}", if_body.0).replace('\n', "\n\t");
                 let else_body = format!("{}", else_body.0).replace('\n', "\n\t");
                 write!(
@@ -106,7 +109,7 @@ impl Display for Ast {
                     write!(f, "\n{}", &node.0)?;
                 }
             }
-            Ast::Lambda(args, body) => {
+            Ast::Lambda(args, _, body) => {
                 let body = format!("{}", body.0).replace('\n', "\n\t");
                 write!(f, "(")?;
                 for arg in args {
@@ -115,7 +118,7 @@ impl Display for Ast {
                 }
                 write!(f, ") => {{ {} \n}}", body)?;
             }
-            Ast::Declaration(name, variant) => match variant.as_ref() {
+            Ast::Declaration((name, _), variant) => match variant.as_ref() {
                 Declaration::Complete(ty, value) => {
                     write!(f, "{} : {} = {}", name, ty.0, value.0)?;
                 }

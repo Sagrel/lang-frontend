@@ -1,21 +1,22 @@
 use std::thread;
 
-use ast::{Ast, Spanned};
+use ast::{Anotated, Ast};
 use chumsky::{prelude::Simple, Parser, Stream};
+use token::*;
 use types::Type;
-use tokenizer::{Span, Token};
 
 use crate::inferer::Inferer;
 
 pub mod ast;
 pub mod inferer;
-pub mod types;
 pub mod parser;
+pub mod token;
 pub mod tokenizer;
+pub mod types;
 
 type ParseResult = (
-    Option<Vec<(Token, Span)>>,
-    Option<(Vec<Spanned<Ast>>, Vec<Type>)>,
+    Option<Vec<Spanned<Token>>>,
+    Option<(Vec<Anotated<Ast>>, Vec<Type>)>,
     Vec<Simple<String>>,
 );
 
@@ -66,9 +67,12 @@ fn parse(src: &str) -> ParseResult {
             ast_errors
                 .into_iter()
                 .map(|e| e.map(|tk| format!("{:?}", tk))),
-        ).chain(inference_errors.into_iter().map(|(span, msg)|{
-            Simple::custom(span, msg) 
-        }))
+        )
+        .chain(
+            inference_errors
+                .into_iter()
+                .map(|(span, msg)| Simple::custom(span, msg)),
+        )
         .collect();
 
     (res_tokens, res_ast_and_types, errors)

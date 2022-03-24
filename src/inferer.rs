@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
-use crate::ast::*;
-use crate::tokenizer::*;
 use crate::types::Type;
+use crate::{
+    ast::*,
+    token::{Span, Token},
+};
 
 #[derive(Clone)]
 pub enum Constraint {
@@ -43,19 +45,19 @@ impl Inferer {
         }
     }
 
-    pub fn infer(mut self, nodes: &mut Vec<Spanned<Ast>>) -> (Vec<Type>, Vec<(Span, String)>) {
+    pub fn infer(mut self, nodes: &mut Vec<Anotated<Ast>>) -> (Vec<Type>, Vec<(Span, String)>) {
         let declared: Vec<_> = nodes
             .iter_mut()
             .filter_map(|node| {
                 node.2 = Some(Type::void());
                 match &mut node.0 {
-                    Ast::Declaration(name, variant) => {
+                    Ast::Declaration((name_tk, _), variant) => {
                         let t = Type::T(self.next());
                         self.env
                             .last_mut()
                             .unwrap()
                             .0
-                            .insert(name.clone(), t.clone());
+                            .insert(name_tk.to_string(), t.clone());
                         Some((t, variant.as_mut(), node.1.clone()))
                     }
                     _ => {
@@ -131,16 +133,17 @@ impl Inferer {
         }
     }
 
-    fn generate_constraints(&mut self, node: &mut Spanned<Ast>) {
+    fn generate_constraints(&mut self, node: &mut Anotated<Ast>) {
         match &mut node.0 {
-            Ast::Literal(l) => match l {
+            Ast::Literal((l, _)) => match l {
                 Token::Bool(_) => node.2 = Some(Type::Bool),
                 Token::Text(_) => node.2 = Some(Type::Text),
                 Token::Number(_) => node.2 = Some(Type::Number),
                 _ => unreachable!(),
             },
-            Ast::Variable(name) => {
-                node.2 = if let Some(t) = self.find_declared(name) {
+            Ast::Variable((name_tk, _)) => {
+                let name = name_tk.to_string();
+                node.2 = if let Some(t) = self.find_declared(&name) {
                     Some(t)
                 } else {
                     self.errors.push((
@@ -177,7 +180,7 @@ impl Inferer {
                 node.2 = Some(retur_type);
             }
             // Transform a.print into print(a), and a.add(b) into add(a,b)
-            Ast::Binary(l, ".", r) => {
+            Ast::Binary(l, (Token::Op(op), _), r) if op == "." => {
                 // TODO the spans are messed up
                 let l = l.clone();
                 let r = r.clone();
@@ -190,7 +193,7 @@ impl Inferer {
                 }
                 self.generate_constraints(node);
             }
-            Ast::Binary(l, op, r) => {
+            Ast::Binary(l, (op_tk, _), r) => {
                 self.generate_constraints(l);
                 self.generate_constraints(r);
                 self.constraints.push(Constraint::Eq(
@@ -200,8 +203,8 @@ impl Inferer {
                 ));
                 let t = Type::T(self.next());
                 node.2 = Some(t);
-                // TODO este warning es falso, desactivarlo
-                let res_type = match op.as_ref() {
+
+                let res_type = match op_tk.to_string().as_str() {
                     "<" | "<=" | ">=" | ">" | "==" | "!=" | "and" | "or" => Type::Bool,
                     _ => l.2.clone().unwrap(),
                 };
@@ -211,7 +214,7 @@ impl Inferer {
                     node.1.clone(),
                 ));
             }
-            Ast::While(cond, body) => {
+            Ast::While(_, cond, body) => {
                 self.generate_constraints(cond);
                 self.constraints.push(Constraint::Eq(
                     cond.2.clone().unwrap(),
@@ -221,7 +224,7 @@ impl Inferer {
                 self.generate_constraints(body);
                 node.2 = Some(Type::void());
             }
-            Ast::If(cond, if_body, else_body) => {
+            Ast::If(_, cond, if_body, _, else_body) => {
                 self.generate_constraints(cond);
                 self.constraints.push(Constraint::Eq(
                     cond.2.clone().unwrap(),
@@ -265,14 +268,18 @@ impl Inferer {
                 };
                 self.env.pop();
             }
-            Ast::Lambda(args, body) => {
+            Ast::Lambda(args, _, body) => {
                 self.env.push((HashMap::new(), false));
                 let arg_types = args
                     .iter_mut()
                     .map(|arg| {
-                        if let Ast::Variable(name) = &arg.0 {
+                        if let Ast::Variable((name_tk, _)) = &arg.0 {
                             let t = Type::T(self.next());
-                            self.env.last_mut().unwrap().0.insert(name.clone(), t);
+                            self.env
+                                .last_mut()
+                                .unwrap()
+                                .0
+                                .insert(name_tk.to_string(), t);
                         }
                         self.generate_constraints(arg);
                         arg.2.clone().unwrap()
@@ -290,14 +297,14 @@ impl Inferer {
             // TODO should declarations return the value?
             // TODO need auxiliary function Node to Type = (Ast) -> Option<Type>
             // TODO Should we convert al declarations to full declarations?
-            Ast::Declaration(name, variant) => {
+            Ast::Declaration((name_tk, _), variant) => {
                 node.2 = Some(Type::void());
                 let expected = Type::T(self.next());
                 self.env
                     .last_mut()
                     .unwrap()
                     .0
-                    .insert(name.clone(), expected.clone());
+                    .insert(name_tk.to_string(), expected.clone());
                 match variant.as_mut() {
                     Declaration::Complete(_, value) => {
                         // TODO Don't ignore types

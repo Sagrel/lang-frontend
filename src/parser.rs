@@ -1,14 +1,16 @@
 use chumsky::prelude::*;
 
-use crate::ast::*;
-use crate::tokenizer::*;
+use crate::{
+    ast::*,
+    token::{Span, Token, Spanned},
+};
 
 // SPEED remove all of the ".boxed()"  they just make compile times more berable
 
 macro_rules! operators {
     // Base case just one element
     ($last:expr) => {
-        just(Token::Op($last.to_string())).to($last)
+        just(Token::Op($last.to_string())).map_with_span(|tk, span| (tk,span))
     };
     // $x is the head and ($($y),+) is the tail, that must contain at least 1 elemet (the $y)
     ($x:expr, $($y:expr),+) => (
@@ -17,11 +19,15 @@ macro_rules! operators {
 }
 
 pub fn parse_with_less_precedence(
-    op: impl Parser<Token, &'static str, Error = Simple<Token>> + Clone,
-    prev: impl Parser<Token, Spanned<Ast>, Error = Simple<Token>> + Clone,
-) -> impl Parser<Token, Spanned<Ast>, Error = Simple<Token>> + Clone {
+    op: impl Parser<Token, Spanned<Token>, Error = Simple<Token>> + Clone,
+    prev: impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> + Clone,
+) -> impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> + Clone {
     prev.clone()
-        .then(op.then(prev).repeated())
+        .then(
+            op
+                .then(prev)
+                .repeated(),
+        )
         .foldl(|a, (op, b)| {
             let span = a.1.start..b.1.end;
             (Ast::Binary(Box::new(a), op, Box::new(b)), span, None)
@@ -29,18 +35,18 @@ pub fn parse_with_less_precedence(
 }
 
 // TODO Make this more error resistant. Unclosed { fucks everything up
-pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Token>> + Clone {
+pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> + Clone {
     recursive(|expr| {
         let lit = filter_map(|span, token| match token {
-            Token::Bool(_) | Token::Number(_) | Token::Text(_) => Ok(Ast::Literal(token)),
+            Token::Bool(_) | Token::Number(_) | Token::Text(_) => Ok(Ast::Literal((token, span))),
             _ => Err(Simple::expected_input_found(span, Vec::new(), Some(token))),
         })
         .labelled("literal")
         .boxed();
 
-        let identifier = filter_map(|span, token| match token {
-            Token::Ident(ident) => Ok(ident),
-            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(token))),
+        let identifier = filter_map(|span, tk| match &tk {
+            Token::Ident(_) => Ok((tk, span)),
+            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tk))),
         })
         .labelled("identifier")
         .boxed();
@@ -70,34 +76,43 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
             .boxed();
 
         let while_ = just(Token::While)
-            .ignore_then(expr.clone())
+            .map_with_span(|tk, span| (tk, span))
+            .then(expr.clone())
             .then(block.clone())
-            .map(|(cond, body)| Ast::While(Box::new(cond), Box::new(body)))
+            .map(|((while_tk, cond), body)| Ast::While(while_tk, Box::new(cond), Box::new(body)))
             .boxed();
 
         let if_ = recursive(|if_| {
             just(Token::If)
-                .ignore_then(expr.clone())
+                .map_with_span(|tk, span| (tk, span))
+                .then(expr.clone())
                 .then(block.clone())
                 .then(
                     just(Token::Else)
-                        .ignore_then(block.clone().or(if_))
+                        .map_with_span(|tk, span| (tk, span))
+                        .then(block.clone().or(if_))
                         .or_not(),
                 )
-                .map_with_span(|((cond, a), b), span: Span| {
+                .map_with_span(|(((if_tk, cond), if_body), else_branch), span: Span| {
+                    let (else_tk, else_body) = match else_branch {
+                        Some((else_tk, else_body)) => (Some(else_tk), else_body),
+                        // If an `if` expression has no trailing `else` block, we magic up one that just produces ()
+                        None => (
+                            None,
+                            (
+                                Ast::Block(vec![(Ast::Tuple(Vec::new()), span.clone(), None)]),
+                                span.clone(),
+                                None,
+                            ),
+                        ),
+                    };
                     (
                         Ast::If(
+                            if_tk,
                             Box::new(cond),
-                            Box::new(a),
-                            Box::new(match b {
-                                Some(b) => b,
-                                // If an `if` expression has no trailing `else` block, we magic up one that just produces ()
-                                None => (
-                                    Ast::Block(vec![(Ast::Tuple(Vec::new()), span.clone(), None)]),
-                                    span.clone(),
-                                    None,
-                                ),
-                            }),
+                            Box::new(if_body),
+                            else_tk,
+                            Box::new(else_body),
                         ),
                         span,
                         None,
@@ -109,11 +124,11 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
         // change this so it only parses declarations or identifiers as args
         let lambda = tuple
             .clone()
-            .then_ignore(just(Token::Op("=>".to_string())))
+            .then(just(Token::Op("=>".to_string())).map_with_span(|tk, span| (tk, span)))
             .then(block.clone())
-            .map(|(args, body)| {
+            .map(|((args, arrow_tk), body)| {
                 if let Ast::Tuple(args) = args {
-                    Ast::Lambda(args, Box::new(body))
+                    Ast::Lambda(args, arrow_tk, Box::new(body))
                 } else {
                     Ast::Error
                 }
@@ -164,7 +179,11 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
                 ],
                 |span| (Ast::Error, span, None),
             ))
-            .recover_with(skip_then_retry_until([Token::Ctrl(')'),Token::Ctrl(']'),Token::Ctrl('}')]))
+            .recover_with(skip_then_retry_until([
+                Token::Ctrl(')'),
+                Token::Ctrl(']'),
+                Token::Ctrl('}'),
+            ]))
             .boxed();
 
         // Function calls have very high precedence so we prioritise them
@@ -195,12 +214,10 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
             .clone()
             .then_ignore(just(Token::Op(":".to_string())))
             .then(expr.clone())
-            .map(|(name, ty)| {
-                Ast::Declaration(name, Box::new(Declaration::OnlyType(ty)))
-            });
+            .map(|(name, ty)| Ast::Declaration(name, Box::new(Declaration::OnlyType(ty))));
         let only_value = identifier
             .clone()
-            .then(just(Token::Op(":=".to_string())).map_with_span(|_,span| span))
+            .then(just(Token::Op(":=".to_string())).map_with_span(|_, span| span))
             .then(expr.clone())
             .map(|((name, span), value)| {
                 Ast::Declaration(name, Box::new(Declaration::OnlyValue(value, span)))
@@ -212,18 +229,18 @@ pub fn expresion_parser() -> impl Parser<Token, Spanned<Ast>, Error = Simple<Tok
             .then_ignore(just(Token::Op("=".to_string())))
             .then(expr.clone())
             .map(|((name, ty), value)| {
-                Ast::Declaration(name, Box::new(Declaration::Complete(ty,value)))
+                Ast::Declaration(name, Box::new(Declaration::Complete(ty, value)))
             });
 
-        let definition = complete.or(only_type).or(only_value).map_with_span(|node, span| {
-            (node, span, None)
-        });
-        
+        let definition = complete
+            .or(only_type)
+            .or(only_value)
+            .map_with_span(|node, span| (node, span, None));
 
         definition.or(logic)
     })
 }
 
-pub fn ast_parser() -> impl Parser<Token, Vec<Spanned<Ast>>, Error = Simple<Token>> + Clone {
+pub fn ast_parser() -> impl Parser<Token, Vec<Anotated<Ast>>, Error = Simple<Token>> + Clone {
     expresion_parser().repeated().then_ignore(end())
 }

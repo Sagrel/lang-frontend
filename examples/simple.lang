@@ -4,20 +4,20 @@ main := () => {
 
 	{
 	 	internal := 2
-	}
+	} 
 
 	external := internal
 
-	a := 1 + 2.add(df) 
+	cont := 1 + 2.add(df) // add(2,df)
 
-	//while cont != 69 {
+	//while cont != 69 { 
 	//	cont := cont.add(1)
 	//	print("not yet")
 	//}
 //
-	//if cont == 69 {
-	//	print("Nice!")
-	//}
+	res := if cont == 69 {
+		5
+	}  else { 420 }
 }
 
  

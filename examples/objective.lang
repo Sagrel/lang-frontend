@@ -1,0 +1,19 @@
+// We can create traits
+Add := trait {
+	add : (T, T) -> T
+}
+
+// And force a type to implement a trait
+Vec3(T) : type + Add + Clone + Copy + Display = (x:T,y:T,z:T)
+
+// Automatically detects T as a generic type because is just a single UPPERCASE letter
+add := (a: Vec3(T), b: Vec3(T)) -> {
+	(a.x + b.x, a.y + b.y, a.z + b.z) as Vec3(T)
+}
+
+// We can infer the type or args
+main := (args) -> {
+	v1 : Vec3 /* (Number) this should be optional somehow */ = (1,2,3) // we need to specify the type somewhere
+	v2 := (3,2,1)
+	print(v1.add(v2))
+}

@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Debug,Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Text,
     Number,
@@ -33,13 +33,13 @@ impl Display for Type {
             }
             Type::T(n) => write!(f, "t{}!", n),
             Type::Fn(args, ret) => {
-				let args: String = args
+                let args: String = args
                     .iter()
                     .map(|arg| arg.to_string())
                     .collect::<Vec<String>>()
                     .join(", ");
                 write!(f, "({}) => {}", args, ret)
-			},
+            }
             Type::Error(msg) => write!(f, "Error: {}", msg),
         }
     }

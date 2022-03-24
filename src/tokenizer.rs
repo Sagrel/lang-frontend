@@ -4,22 +4,11 @@ use chumsky::{
     Parser,
 };
 
-pub type Span = std::ops::Range<usize>;
+use crate::token::{Token, Spanned};
 
-#[derive(Clone, Debug, PartialEq, Hash, Eq)]
-pub enum Token {
-    Bool(bool),
-    Number(String),
-    Text(String),
-    Op(String), // SPEED make this into a &'static str NOTE: this will be easy when zero-copy branch lands
-    Ctrl(char),
-    Ident(String),
-    While,
-    If,
-    Else,
-}
 
-pub fn tokenizer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>> {
+
+pub fn tokenizer() -> impl Parser<char, Vec<Spanned<Token>>, Error = Simple<char>> {
     // A parser for numbers
     let num = text::int(10)
         .chain::<char, _, _>(just('.').chain(text::digits(10)).or_not().flatten())
@@ -71,7 +60,9 @@ pub fn tokenizer() -> impl Parser<char, Vec<(Token, Span)>, Error = Simple<char>
         .or(ident)
         .recover_with(skip_then_retry_until([])); // THIS IS ALL THE ERROR RECOVERY CODE. AMAZING!!!
 
-    let comment = just("//").then(take_until(just('\n').ignored().or(end()))).padded();
+    let comment = just("//")
+        .then(take_until(just('\n').ignored().or(end())))
+        .padded();
 
     token
         .padded_by(comment.repeated())
