@@ -60,6 +60,7 @@ impl Inferer {
                             .insert(name_tk.to_string(), t.clone());
                         Some((t, variant.as_mut(), node.1.clone()))
                     }
+                    Ast::Error | Ast::Coment(_) => None,
                     _ => {
                         self.errors.push((
                             node.1.clone(),

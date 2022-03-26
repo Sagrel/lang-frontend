@@ -2,7 +2,7 @@ use chumsky::prelude::*;
 
 use crate::{
     ast::*,
-    token::{Span, Token, Spanned},
+    token::{Span, Spanned, Token},
 };
 
 // SPEED remove all of the ".boxed()"  they just make compile times more berable
@@ -23,11 +23,7 @@ pub fn parse_with_less_precedence(
     prev: impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> + Clone,
 ) -> impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> + Clone {
     prev.clone()
-        .then(
-            op
-                .then(prev)
-                .repeated(),
-        )
+        .then(op.then(prev).repeated())
         .foldl(|a, (op, b)| {
             let span = a.1.start..b.1.end;
             (Ast::Binary(Box::new(a), op, Box::new(b)), span, None)
@@ -51,11 +47,20 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         .labelled("identifier")
         .boxed();
 
+        // FIXME One element tuples are bad 
         let tuple = expr
             .clone()
             .separated_by(just(Token::Ctrl(',')))
             .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-            .map(Ast::Tuple)
+            .map(
+                Ast::Tuple, /*|args| , {
+                                if args.len() == 1 {
+                                    args.pop().unwrap().0
+                                } else {
+                                    Ast::Tuple(args)
+                                }
+                            }*/
+            )
             .boxed();
 
         let block = expr
@@ -121,7 +126,7 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         })
         .boxed();
 
-        // change this so it only parses declarations or identifiers as args
+        // TODO change this so it only parses declarations or identifiers as args
         let lambda = tuple
             .clone()
             .then(just(Token::Op("=>".to_string())).map_with_span(|tk, span| (tk, span)))
@@ -242,7 +247,8 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
             _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tk))),
         })
         .labelled("identifier")
-        .boxed().map_with_span(|c,span| (c, span, None));
+        .boxed()
+        .map_with_span(|c, span| (c, span, None));
 
         definition.or(logic).or(comment)
     })
