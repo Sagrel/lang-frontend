@@ -45,25 +45,33 @@ impl Inferer {
         }
     }
 
+    fn get_env(&mut self) -> &mut HashMap<String, Type> {
+        &mut self.env.last_mut().unwrap().0
+    }
+
     pub fn infer(mut self, nodes: &mut Vec<Anotated<Ast>>) -> (Vec<Type>, Vec<(Span, String)>) {
         let declared: Vec<_> = nodes
             .iter_mut()
-            .filter_map(|node| {
-                node.2 = Some(Type::void());
-                match &mut node.0 {
-                    Ast::Declaration((name_tk, _), variant) => {
-                        let t = Type::T(self.next());
-                        self.env
-                            .last_mut()
-                            .unwrap()
-                            .0
-                            .insert(name_tk.to_string(), t.clone());
-                        Some((t, variant.as_mut(), node.1.clone()))
+            .filter_map(|(node, span, node_ty)| {
+                match node {
+                    Ast::Declaration((name_tk, _), _, ty, _, value) => {
+                        let expected = if let Some(_ty) = ty {
+                            todo!() // FIXME this should generate the type and use it directly
+                        } else {
+                            Type::T(self.next())
+                        };
+                        // The type of the declaration Node is the type of the variable
+                        *node_ty = Some(expected.clone());
+                        self.get_env().insert(name_tk.to_string(), expected.clone());
+
+                        value
+                            .as_mut()
+                            .map(|value| (expected, value.as_mut(), span.clone()))
                     }
                     Ast::Error | Ast::Coment(_) => None,
                     _ => {
                         self.errors.push((
-                            node.1.clone(),
+                            span.clone(),
                             "Only declarations are suported at top level".to_owned(),
                         ));
                         None
@@ -71,23 +79,10 @@ impl Inferer {
                 }
             })
             .collect();
-        for (expected, variant, span) in declared {
-            match variant {
-                Declaration::Complete(_, value) => {
-                    // TODO Don't ignore types
-                    self.generate_constraints(value);
-                    self.constraints
-                        .push(Constraint::Eq(expected, value.2.clone().unwrap(), span))
-                }
-                Declaration::OnlyType(_) => {
-                    // TODO Don't ignore types
-                }
-                Declaration::OnlyValue(value, _) => {
-                    self.generate_constraints(value);
-                    self.constraints
-                        .push(Constraint::Eq(expected, value.2.clone().unwrap(), span))
-                }
-            }
+        for (expected, value, span) in declared {
+            self.generate_constraints(value);
+            self.constraints
+                .push(Constraint::Eq(expected, value.2.clone().unwrap(), span))
         }
 
         let mut substitution_table = vec![None; self.i];
@@ -297,36 +292,22 @@ impl Inferer {
             }
             // TODO should declarations return the value?
             // TODO need auxiliary function Node to Type = (Ast) -> Option<Type>
-            // TODO Should we convert al declarations to full declarations?
-            Ast::Declaration((name_tk, _), variant) => {
-                node.2 = Some(Type::void());
-                let expected = Type::T(self.next());
-                self.env
-                    .last_mut()
-                    .unwrap()
-                    .0
-                    .insert(name_tk.to_string(), expected.clone());
-                match variant.as_mut() {
-                    Declaration::Complete(_, value) => {
-                        // TODO Don't ignore types
-                        self.generate_constraints(value);
-                        self.constraints.push(Constraint::Eq(
-                            expected,
-                            value.2.clone().unwrap(),
-                            node.1.clone(),
-                        ))
-                    }
-                    Declaration::OnlyType(_) => {
-                        // TODO Don't ignore types
-                    }
-                    Declaration::OnlyValue(value, _) => {
-                        self.generate_constraints(value);
-                        self.constraints.push(Constraint::Eq(
-                            expected,
-                            value.2.clone().unwrap(),
-                            node.1.clone(),
-                        ))
-                    }
+            Ast::Declaration((name_tk, _), _, ty, _, value) => {
+                let expected = if let Some(_ty) = ty {
+                    todo!() // FIXME this should generate the type and use it directly
+                } else {
+                    Type::T(self.next())
+                };
+                // The type of the declaration Node is the type of the variable
+                node.2 = Some(expected.clone());
+                self.get_env().insert(name_tk.to_string(), expected.clone());
+                if let Some(value) = value {
+                    self.generate_constraints(value);
+                    self.constraints.push(Constraint::Eq(
+                        expected,
+                        value.2.clone().unwrap(),
+                        node.1.clone(),
+                    ))
                 }
             }
             Ast::Coment(_) => (),

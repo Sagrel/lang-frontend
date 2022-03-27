@@ -7,7 +7,8 @@ fn main() {
     let path = if let Some(path) = env::args().nth(1) {
         path
     } else {
-        "./../lang-llvm/examples/main_arithmetic.lang".to_owned()
+        "./examples/simple.lang".to_owned()
+        //"./../lang-llvm/examples/main_call.lang".to_owned()
     };
 
     let src = fs::read_to_string(path).expect("Unable to read file");

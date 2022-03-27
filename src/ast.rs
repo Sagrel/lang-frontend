@@ -1,17 +1,8 @@
 use crate::{token::*, types::Type};
 use std::fmt::Display;
 
+// TODO remove the Option around Type and just give it a default void type or something
 pub type Anotated<T> = (T, Span, Option<Type>);
-
-#[derive(Debug, Clone)]
-pub enum Declaration {
-    Complete(Anotated<Ast> /*type */, Anotated<Ast> /*value */),
-    OnlyType(Anotated<Ast> /*type */),
-    OnlyValue(
-        Anotated<Ast>, /*value */
-        Span,          /* The := span for inlay_hints */
-    ),
-}
 
 #[derive(Debug, Clone)]
 pub enum Ast {
@@ -20,8 +11,11 @@ pub enum Ast {
     Literal(Spanned<Token>),
     Variable(Spanned<Token>),
     Declaration(
-        Spanned<Token>,   /*name */
-        Box<Declaration>, /*type and value */
+        Spanned<Token>,              /* name */
+        Spanned<Token>,              /* : token or := token */
+        Option<Box<Anotated<Self>>>, /* type */
+        Option<Spanned<Token>>,      /* = token */
+        Option<Box<Anotated<Self>>>, /* value */
     ),
     Call(
         Box<Anotated<Self>>, /* fn */
@@ -119,20 +113,22 @@ impl Display for Ast {
                 }
                 write!(f, ") => {{ {} \n}}", body)?;
             }
-            Ast::Declaration((name, _), variant) => match variant.as_ref() {
-                Declaration::Complete(ty, value) => {
-                    write!(f, "{} : {} = {}", name, ty.0, value.0)?;
+            Ast::Declaration((name, _), (def_tk, _), ty, eq_tk, value) => {
+                write!(f, "{} {} ", name, def_tk)?;
+
+                if let Some(ty) = ty {
+                    write!(f, "{}", ty.0)?;
                 }
-                Declaration::OnlyType(ty) => {
-                    write!(f, "{} : {}", name, ty.0)?;
+                if let Some((eq_tk, _)) = eq_tk {
+                    write!(f, " {} ", eq_tk)?;
                 }
-                Declaration::OnlyValue(value, _) => {
-                    write!(f, "{} := {}", name, value.0)?;
+                if let Some(value) = value {
+                    write!(f, "{}", value.0)?;
                 }
-            },
-            Ast::Coment((tk,_)) => {
-                    write!(f, "{}", tk)?;
-                }
+            }
+            Ast::Coment((tk, _)) => {
+                write!(f, "{}", tk)?;
+            }
         }
         Ok(())
     }

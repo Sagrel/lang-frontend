@@ -47,7 +47,7 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         .labelled("identifier")
         .boxed();
 
-        // FIXME One element tuples are bad 
+        // FIXME One element tuples are bad
         let tuple = expr
             .clone()
             .separated_by(just(Token::Ctrl(',')))
@@ -217,24 +217,32 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         // TODO create a parser for types only
         let only_type = identifier
             .clone()
-            .then_ignore(just(Token::Op(":".to_string())))
+            .then(just(Token::Op(":".to_string())).map_with_span(|tk, span| (tk, span)))
             .then(expr.clone())
-            .map(|(name, ty)| Ast::Declaration(name, Box::new(Declaration::OnlyType(ty))));
+            .map(|((name, def_tk), ty)| {
+                Ast::Declaration(name, def_tk, Some(Box::new(ty)), None, None)
+            });
         let only_value = identifier
             .clone()
-            .then(just(Token::Op(":=".to_string())).map_with_span(|_, span| span))
+            .then(just(Token::Op(":=".to_string())).map_with_span(|tk, span| (tk, span)))
             .then(expr.clone())
-            .map(|((name, span), value)| {
-                Ast::Declaration(name, Box::new(Declaration::OnlyValue(value, span)))
+            .map(|((name, def_tk), value)| {
+                Ast::Declaration(name, def_tk, None, None, Some(Box::new(value)))
             });
         let complete = identifier
             .clone()
-            .then_ignore(just(Token::Op(":".to_string())))
+            .then(just(Token::Op(":".to_string())).map_with_span(|tk, span| (tk, span)))
             .then(expr.clone())
-            .then_ignore(just(Token::Op("=".to_string())))
+            .then(just(Token::Op("=".to_string())).map_with_span(|tk, span| (tk, span)))
             .then(expr.clone())
-            .map(|((name, ty), value)| {
-                Ast::Declaration(name, Box::new(Declaration::Complete(ty, value)))
+            .map(|((((name, def_tk), ty), eq_tk), value)| {
+                Ast::Declaration(
+                    name,
+                    def_tk,
+                    Some(Box::new(ty)),
+                    Some(eq_tk),
+                    Some(Box::new(value)),
+                )
             });
 
         let definition = complete
