@@ -2,4 +2,6 @@
 linker = "rust-lld.exe"
 
 [build]
+debug = 1
 incremental = true
+lto = false

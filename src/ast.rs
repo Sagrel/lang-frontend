@@ -41,7 +41,7 @@ pub enum Ast {
     Tuple(Vec<Anotated<Self>> /* elems */),
     Block(Vec<Anotated<Self>> /* elems */),
     Lambda(
-        Vec<Anotated<Self>>, /* args */
+        Vec<Anotated<Self>>, /* args */ // TODO Make it so this are always declarations
         Spanned<Token>,      /* Arrow token */
         Box<Anotated<Self>>, /* body */
     ),

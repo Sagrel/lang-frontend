@@ -47,20 +47,11 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         .labelled("identifier")
         .boxed();
 
-        // FIXME One element tuples are bad
         let tuple = expr
             .clone()
             .separated_by(just(Token::Ctrl(',')))
             .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-            .map(
-                Ast::Tuple, /*|args| , {
-                                if args.len() == 1 {
-                                    args.pop().unwrap().0
-                                } else {
-                                    Ast::Tuple(args)
-                                }
-                            }*/
-            )
+            .map(Ast::Tuple)
             .boxed();
 
         let block = expr
@@ -147,7 +138,6 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         let atom = lit
             .or(identifier.clone().map(Ast::Variable))
             .or(lambda)
-            .or(tuple.clone())
             .or(while_)
             .map_with_span(|expr, span| (expr, span, None))
             .or(block)
@@ -155,7 +145,9 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
             // this is for the case we find 2 * (1 + 3), it should not afect function calls like print("hello world")
             .or(expr
                 .clone()
-                .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))) // Attempt to recover anything that looks like a parenthesised expression but contains errors
+                .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))) 
+            // HACK we move tuples down here to prevent a clash with just a parenthesised expresion
+            .or(tuple.clone().map_with_span(|expr, span| (expr, span, None)))
             .recover_with(nested_delimiters(
                 Token::Ctrl('('),
                 Token::Ctrl(')'),

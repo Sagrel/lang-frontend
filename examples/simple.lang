@@ -4,7 +4,7 @@ main := () => {
 
 	{
 	 	internal := 2
-	} 
+	}
 
 	external := internal
 
