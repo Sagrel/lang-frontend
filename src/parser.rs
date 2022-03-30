@@ -3,6 +3,7 @@ use chumsky::prelude::*;
 use crate::{
     ast::*,
     token::{Span, Spanned, Token},
+    types::Type,
 };
 
 // SPEED remove all of the ".boxed()"  they just make compile times more berable
@@ -18,7 +19,7 @@ macro_rules! operators {
     )
 }
 
-pub fn parse_with_less_precedence(
+fn parse_with_less_precedence(
     op: impl Parser<Token, Spanned<Token>, Error = Simple<Token>> + Clone,
     prev: impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> + Clone,
 ) -> impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> + Clone {
@@ -28,6 +29,21 @@ pub fn parse_with_less_precedence(
             let span = a.1.start..b.1.end;
             (Ast::Binary(Box::new(a), op, Box::new(b)), span, None)
         })
+}
+
+fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
+    recursive(|ty| {
+        let tuple = ty.clone().repeated().delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')));
+
+        let lambda = tuple.clone().then_ignore(just(Token::Op("=>".to_string()))).then(ty).map(|(args,ret)| Type::Fn(args, Box::new(ret)));
+
+        just(Token::Ident("Number".to_string()))
+            .to(Type::Number)
+            .or(just(Token::Ident("Text".to_string())).to(Type::Text))
+            .or(just(Token::Ident("Bool".to_string())).to(Type::Bool))
+            .or(lambda)
+            .or(tuple.map(Type::Tuple))
+    })
 }
 
 // TODO Make this more error resistant. Unclosed { fucks everything up
@@ -145,7 +161,7 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
             // this is for the case we find 2 * (1 + 3), it should not afect function calls like print("hello world")
             .or(expr
                 .clone()
-                .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))) 
+                .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')'))))
             // HACK we move tuples down here to prevent a clash with just a parenthesised expresion
             .or(tuple.clone().map_with_span(|expr, span| (expr, span, None)))
             .recover_with(nested_delimiters(
@@ -206,11 +222,10 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         let compare = parse_with_less_precedence(operators!("==", "!=", "<", "<=", ">", ">="), sum);
         let logic = parse_with_less_precedence(operators!("and", "or"), compare);
 
-        // TODO create a parser for types only
         let only_type = identifier
             .clone()
             .then(just(Token::Op(":".to_string())).map_with_span(|tk, span| (tk, span)))
-            .then(expr.clone())
+            .then(type_parser().map_with_span(|ty, span| {(Ast::Type(ty), span, None) }))
             .map(|((name, def_tk), ty)| {
                 Ast::Declaration(name, def_tk, Some(Box::new(ty)), None, None)
             });
@@ -224,7 +239,7 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         let complete = identifier
             .clone()
             .then(just(Token::Op(":".to_string())).map_with_span(|tk, span| (tk, span)))
-            .then(expr.clone())
+            .then(type_parser().map_with_span(|ty, span| {(Ast::Type(ty), span, None) }))
             .then(just(Token::Op("=".to_string())).map_with_span(|tk, span| (tk, span)))
             .then(expr.clone())
             .map(|((((name, def_tk), ty), eq_tk), value)| {

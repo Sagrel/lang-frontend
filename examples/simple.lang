@@ -1,24 +1,30 @@
-tuple := (df, "hola")
-df := 12
-main := () => {
-
-	{
-	 	internal := 2
-	}
-
-	external := internal
-
-	cont := 1 + 2.add(df) // add(2,df)
-
-	//while cont != 69 { 
-	//	cont := cont.add(1)
-	//	print("not yet")
-	//}
+//tuple := (df, "hola")
+//df := 12
+//main := () => {
+//	{
+//	 	internal := false or true
+//	}
+// 
+//	external := internal
 //
-	res := if cont == 69 {
-		5
-	}  else { 420 }
-}
+//	cont := 1 + 2.add(df) // add(2,df)
+//
+//	//while cont != 69 { 
+//	//	cont := cont.add(1)
+//	//	print("not yet")
+//	//}
+//	
+//	{
+//		b := "hola"
+//		a := (2 + 5) / 3
+//	}
+//
+//	res := if cont == 69 {
+//		5
+//	}  else { 420 }
+//}
+//
+// 
+//add := (a, b) => { a + b }
 
- 
-add := (a, b) => { a + b }
+main : () => Text // = () => { 69 }

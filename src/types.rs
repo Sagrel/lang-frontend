@@ -3,6 +3,7 @@ use std::fmt::Display;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Text,
+    Type,
     Number,
     Bool,
     Tuple(Vec<Type>),
@@ -22,6 +23,7 @@ impl Display for Type {
         match self {
             Type::Text => write!(f, "Text"),
             Type::Number => write!(f, "Number"),
+            Type::Type => write!(f, "Type"),
             Type::Bool => write!(f, "Bool"),
             Type::Tuple(args) => {
                 let args: String = args

@@ -9,6 +9,7 @@ pub enum Ast {
     Error,
     Coment(Spanned<Token>),
     Literal(Spanned<Token>),
+    Type(Type),
     Variable(Spanned<Token>),
     Declaration(
         Spanned<Token>,              /* name */
@@ -41,7 +42,8 @@ pub enum Ast {
     Tuple(Vec<Anotated<Self>> /* elems */),
     Block(Vec<Anotated<Self>> /* elems */),
     Lambda(
-        Vec<Anotated<Self>>, /* args */ // TODO Make it so this are always declarations
+        Vec<Anotated<Self>>, /* args */
+        // TODO Make it so this are always declarations
         Spanned<Token>,      /* Arrow token */
         Box<Anotated<Self>>, /* body */
     ),
@@ -129,6 +131,9 @@ impl Display for Ast {
             Ast::Coment((tk, _)) => {
                 write!(f, "{}", tk)?;
             }
+            Ast::Type(t) => {
+                write!(f, "{}", t)?;
+            },
         }
         Ok(())
     }

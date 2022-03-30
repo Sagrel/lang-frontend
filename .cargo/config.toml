@@ -2,6 +2,9 @@
 linker = "rust-lld.exe"
 
 [build]
-debug = 1
 incremental = true
+pipelining = true
+
+[profile.dev]
+debug = 1
 lto = false

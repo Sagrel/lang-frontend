@@ -55,8 +55,13 @@ impl Inferer {
             .filter_map(|(node, span, node_ty)| {
                 match node {
                     Ast::Declaration((name_tk, _), _, ty, _, value) => {
-                        let expected = if let Some(_ty) = ty {
-                            todo!() // FIXME this should generate the type and use it directly
+                        let expected = if let Some(ty) = ty {
+                            if let (Ast::Type(ty), _, _) = ty.as_ref() {
+                                ty.clone()
+                            } else {
+                                self.errors.push((span.clone(), "This is suposed to be a type".to_string()));
+                                Type::T(self.next())
+                            }
                         } else {
                             Type::T(self.next())
                         };
@@ -311,6 +316,9 @@ impl Inferer {
                 }
             }
             Ast::Coment(_) => (),
+            Ast::Type(_) => {
+                node.2 = Some(Type::Type);
+            },
         }
     }
 
