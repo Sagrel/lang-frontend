@@ -70,11 +70,10 @@ fn definition_parser(
             Ast::Declaration(name, def_tk, None, None, Some(Box::new(value)))
         });
     let complete = identifier
-        .clone()
         .then(just(Token::Op(":".to_string())).map_with_span(|tk, span| (tk, span)))
         .then(type_parser().map_with_span(|ty, span| (Ast::Type(ty), span, None)))
         .then(just(Token::Op("=".to_string())).map_with_span(|tk, span| (tk, span)))
-        .then(expresion.clone())
+        .then(expresion)
         .map(|((((name, def_tk), ty), eq_tk), value)| {
             Ast::Declaration(
                 name,

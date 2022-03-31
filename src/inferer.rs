@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap};
 
 use crate::types::Type;
 use crate::{
@@ -6,7 +6,7 @@ use crate::{
     token::{Span, Token},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Constraint {
     Eq(Type, Type, Span),
 }
@@ -59,7 +59,10 @@ impl Inferer {
                             if let (Ast::Type(ty), _, _) = ty.as_ref() {
                                 ty.clone()
                             } else {
-                                self.errors.push((span.clone(), "This is suposed to be a type".to_string()));
+                                self.errors.push((
+                                    span.clone(),
+                                    "This is suposed to be a type".to_string(),
+                                ));
                                 Type::T(self.next())
                             }
                         } else {
@@ -92,13 +95,15 @@ impl Inferer {
 
         let mut substitution_table = vec![None; self.i];
 
-        for constraint in self.constraints.clone().into_iter() {
-            self.unify_one(&mut substitution_table, &constraint)
+        // SPEED dont clone
+        for constraint in self.constraints.clone().iter() {
+            println!("{:?}", constraint);
+            self.unify_one(&mut substitution_table, constraint)
         }
 
         let type_table = substitution_table
             .into_iter()
-            .map(|e| e.unwrap_or(Type::Error("???")))
+            .map(|e| e.unwrap_or(Type::Error()))
             .collect();
 
         (Inferer::finalize_type_table(type_table), self.errors)
@@ -276,11 +281,7 @@ impl Inferer {
                     .map(|arg| {
                         if let Ast::Variable((name_tk, _)) = &arg.0 {
                             let t = Type::T(self.next());
-                            self.env
-                                .last_mut()
-                                .unwrap()
-                                .0
-                                .insert(name_tk.to_string(), t);
+                            self.get_env().insert(name_tk.to_string(), t);
                         }
                         self.generate_constraints(arg);
                         arg.2.clone().unwrap()
@@ -318,7 +319,7 @@ impl Inferer {
             Ast::Coment(_) => (),
             Ast::Type(_) => {
                 node.2 = Some(Type::Type);
-            },
+            }
         }
     }
 
@@ -355,7 +356,7 @@ impl Inferer {
                                 ),
                                 ));
                             }
-                            for (a, b) in args1.iter().zip(args1.iter()) {
+                            for (a, b) in args1.iter().zip(args2.iter()) {
                                 self.unify_one(
                                     substitution_map,
                                     &Constraint::Eq(a.clone(), b.clone(), span.clone()),

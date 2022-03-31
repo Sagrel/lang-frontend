@@ -9,7 +9,7 @@ pub enum Type {
     Tuple(Vec<Type>),
     T(usize),
     Fn(Vec<Type>, Box<Type>),
-    Error(&'static str),
+    Error(),
 }
 
 impl Type {
@@ -42,7 +42,7 @@ impl Display for Type {
                     .join(", ");
                 write!(f, "({}) => {}", args, ret)
             }
-            Type::Error(msg) => write!(f, "Error: {}", msg),
+            Type::Error() => write!(f, "?"),
         }
     }
 }
