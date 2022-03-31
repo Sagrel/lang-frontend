@@ -33,9 +33,16 @@ fn parse_with_less_precedence(
 
 fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
     recursive(|ty| {
-        let tuple = ty.clone().repeated().delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')));
+        let tuple = ty
+            .clone()
+            .repeated()
+            .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')));
 
-        let lambda = tuple.clone().then_ignore(just(Token::Op("=>".to_string()))).then(ty).map(|(args,ret)| Type::Fn(args, Box::new(ret)));
+        let lambda = tuple
+            .clone()
+            .then_ignore(just(Token::Op("=>".to_string())))
+            .then(ty)
+            .map(|(args, ret)| Type::Fn(args, Box::new(ret)));
 
         just(Token::Ident("Number".to_string()))
             .to(Type::Number)
@@ -44,6 +51,44 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
             .or(lambda)
             .or(tuple.map(Type::Tuple))
     })
+}
+
+fn definition_parser(
+    identifier: impl Parser<Token, Spanned<Token>, Error = Simple<Token>> + Clone,
+    expresion: impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> + Clone,
+) -> impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> {
+    let only_type = identifier
+        .clone()
+        .then(just(Token::Op(":".to_string())).map_with_span(|tk, span| (tk, span)))
+        .then(type_parser().map_with_span(|ty, span| (Ast::Type(ty), span, None)))
+        .map(|((name, def_tk), ty)| Ast::Declaration(name, def_tk, Some(Box::new(ty)), None, None));
+    let only_value = identifier
+        .clone()
+        .then(just(Token::Op(":=".to_string())).map_with_span(|tk, span| (tk, span)))
+        .then(expresion.clone())
+        .map(|((name, def_tk), value)| {
+            Ast::Declaration(name, def_tk, None, None, Some(Box::new(value)))
+        });
+    let complete = identifier
+        .clone()
+        .then(just(Token::Op(":".to_string())).map_with_span(|tk, span| (tk, span)))
+        .then(type_parser().map_with_span(|ty, span| (Ast::Type(ty), span, None)))
+        .then(just(Token::Op("=".to_string())).map_with_span(|tk, span| (tk, span)))
+        .then(expresion.clone())
+        .map(|((((name, def_tk), ty), eq_tk), value)| {
+            Ast::Declaration(
+                name,
+                def_tk,
+                Some(Box::new(ty)),
+                Some(eq_tk),
+                Some(Box::new(value)),
+            )
+        });
+
+    complete
+        .or(only_type)
+        .or(only_value)
+        .map_with_span(|node, span| (node, span, None))
 }
 
 // TODO Make this more error resistant. Unclosed { fucks everything up
@@ -222,40 +267,7 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         let compare = parse_with_less_precedence(operators!("==", "!=", "<", "<=", ">", ">="), sum);
         let logic = parse_with_less_precedence(operators!("and", "or"), compare);
 
-        let only_type = identifier
-            .clone()
-            .then(just(Token::Op(":".to_string())).map_with_span(|tk, span| (tk, span)))
-            .then(type_parser().map_with_span(|ty, span| {(Ast::Type(ty), span, None) }))
-            .map(|((name, def_tk), ty)| {
-                Ast::Declaration(name, def_tk, Some(Box::new(ty)), None, None)
-            });
-        let only_value = identifier
-            .clone()
-            .then(just(Token::Op(":=".to_string())).map_with_span(|tk, span| (tk, span)))
-            .then(expr.clone())
-            .map(|((name, def_tk), value)| {
-                Ast::Declaration(name, def_tk, None, None, Some(Box::new(value)))
-            });
-        let complete = identifier
-            .clone()
-            .then(just(Token::Op(":".to_string())).map_with_span(|tk, span| (tk, span)))
-            .then(type_parser().map_with_span(|ty, span| {(Ast::Type(ty), span, None) }))
-            .then(just(Token::Op("=".to_string())).map_with_span(|tk, span| (tk, span)))
-            .then(expr.clone())
-            .map(|((((name, def_tk), ty), eq_tk), value)| {
-                Ast::Declaration(
-                    name,
-                    def_tk,
-                    Some(Box::new(ty)),
-                    Some(eq_tk),
-                    Some(Box::new(value)),
-                )
-            });
-
-        let definition = complete
-            .or(only_type)
-            .or(only_value)
-            .map_with_span(|node, span| (node, span, None));
+        let definition = definition_parser(identifier, expr);
 
         let comment = filter_map(|span, tk| match &tk {
             Token::Comment(_) => Ok(Ast::Coment((tk, span))),
