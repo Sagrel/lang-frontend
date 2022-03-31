@@ -97,7 +97,7 @@ impl Inferer {
 
         // SPEED dont clone
         for constraint in self.constraints.clone().iter() {
-            println!("{:?}", constraint);
+            //println!("{:?}", constraint);
             self.unify_one(&mut substitution_table, constraint)
         }
 
