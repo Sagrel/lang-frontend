@@ -35,7 +35,7 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
     recursive(|ty| {
         let tuple = ty
             .clone()
-            .repeated()
+            .separated_by(just(Token::Ctrl(',')))
             .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')));
 
         let lambda = tuple

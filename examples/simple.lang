@@ -1,39 +1,36 @@
+tuple : (Number, Text)
+print : (Text) => ()
 add := (a, b) => {a+b}
 
 main := () => {
 	34.add(35)
 } 
+tuple := (df, "hola",12)
+df := 12
 
+main : () => Number = () => {
+	{
+	 	internal := false or true
+	}
 
+	external := internal
 
-//tuple := (df, "hola")
-//df := 12
-//
-//main : () => Number = () => {
-//	{
-//	 	internal := false or true
-//	}
-//
-//	external := internal
-//
-//	cont := 1 + 2.add(df) // add(2,df)
-//
-//	while cont != 69 { 
-//		cont := cont.add(1)
-//		print("not yet")
-//	}
-//	
-//	{
-//		b := "hola"
-//		a := (2 + 5) / 3
-//	}
-//
-//	res := if cont == 69 {
-//		5
-//	}  else { 420 }
-//}
-//
-// 
-//add := (a, b) => { a + b }
-//
-//
+	cont := 1 + 2.add(df) // add(2,df)
+
+	while cont != 69 { 
+		cont := cont.add(1)
+		print("not yet")
+	}
+	
+	{
+		b := "hola"
+		a := (2 + 5) / 3
+	}
+
+	res := if cont == 69 {
+		5
+	}  else { 420 }
+}
+
+ 
+

@@ -1,0 +1,6 @@
+ 
+extern : () => Number
+tuple := (69, "Hello word!")
+
+tuple : (Number, Text) = (69, "Hello word!")
+tuple : (Number, Text)
