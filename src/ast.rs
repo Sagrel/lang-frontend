@@ -5,6 +5,28 @@ use std::fmt::Display;
 pub type Anotated<T> = (T, Span, Option<Type>);
 
 #[derive(Debug, Clone)]
+pub enum Pattern {
+    Var(Spanned<Token>),
+    Tuple(Vec<Anotated<Pattern>>),
+}
+
+impl Display for Pattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Var((name, _)) => write!(f, "{}", name),
+            Self::Tuple(args) => write!(
+                f,
+                "{}",
+                args.iter()
+                    .map(|(pattern, _, _)| pattern.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Ast {
     Error,
     Coment(Spanned<Token>),
@@ -12,10 +34,10 @@ pub enum Ast {
     Type(Type),
     Variable(Spanned<Token>),
     Declaration(
-        Spanned<Token>,              /* name */
-        Spanned<Token>,              /* : token or := token */
+        Anotated<Pattern>, /* Pattern, allows for "var := value" or "(a,b) := tuple"*/
+        Spanned<Token>,    /* : token or := token */
         Option<Box<Anotated<Self>>>, /* type */
-        Option<Spanned<Token>>,      /* = token */
+        Option<Spanned<Token>>, /* = token */
         Option<Box<Anotated<Self>>>, /* value */
     ),
     Call(
@@ -115,8 +137,8 @@ impl Display for Ast {
                 }
                 write!(f, ") => {{ {} \n}}", body)?;
             }
-            Ast::Declaration((name, _), (def_tk, _), ty, eq_tk, value) => {
-                write!(f, "{} {} ", name, def_tk)?;
+            Ast::Declaration((pattern, _, _), (def_tk, _), ty, eq_tk, value) => {
+                write!(f, "{} {} ", pattern, def_tk)?;
 
                 if let Some(ty) = ty {
                     write!(f, "{}", ty.0)?;
@@ -133,7 +155,7 @@ impl Display for Ast {
             }
             Ast::Type(t) => {
                 write!(f, "{}", t)?;
-            },
+            }
         }
         Ok(())
     }

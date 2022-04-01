@@ -53,23 +53,42 @@ fn type_parser() -> impl Parser<Token, Type, Error = Simple<Token>> + Clone {
     })
 }
 
+fn identifier_parser() -> impl Parser<Token, Spanned<Token>, Error = Simple<Token>> + Clone {
+    filter_map(|span, tk| match &tk {
+        Token::Ident(_) => Ok((tk, span)),
+        _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tk))),
+    })
+    .labelled("identifier")
+}
+
+fn pattern_parser() -> impl Parser<Token, Anotated<Pattern>, Error = Simple<Token>> {
+    recursive(|pattern| {
+        let var_pattern = identifier_parser().map(Pattern::Var);
+        let tuple_pattern = pattern
+            .clone()
+            .separated_by(just(Token::Ctrl(',')))
+            .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
+            .map(Pattern::Tuple);
+        var_pattern
+            .or(tuple_pattern)
+            .map_with_span(|p, span| (p, span, None))
+    })
+}
+
 fn definition_parser(
-    identifier: impl Parser<Token, Spanned<Token>, Error = Simple<Token>> + Clone,
     expresion: impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> + Clone,
 ) -> impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> {
-    let only_type = identifier
-        .clone()
+    let only_type = pattern_parser()
         .then(just(Token::Op(":".to_string())).map_with_span(|tk, span| (tk, span)))
         .then(type_parser().map_with_span(|ty, span| (Ast::Type(ty), span, None)))
         .map(|((name, def_tk), ty)| Ast::Declaration(name, def_tk, Some(Box::new(ty)), None, None));
-    let only_value = identifier
-        .clone()
+    let only_value = pattern_parser()
         .then(just(Token::Op(":=".to_string())).map_with_span(|tk, span| (tk, span)))
         .then(expresion.clone())
         .map(|((name, def_tk), value)| {
             Ast::Declaration(name, def_tk, None, None, Some(Box::new(value)))
         });
-    let complete = identifier
+    let complete = pattern_parser()
         .then(just(Token::Op(":".to_string())).map_with_span(|tk, span| (tk, span)))
         .then(type_parser().map_with_span(|ty, span| (Ast::Type(ty), span, None)))
         .then(just(Token::Op("=".to_string())).map_with_span(|tk, span| (tk, span)))
@@ -100,12 +119,7 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         .labelled("literal")
         .boxed();
 
-        let identifier = filter_map(|span, tk| match &tk {
-            Token::Ident(_) => Ok((tk, span)),
-            _ => Err(Simple::expected_input_found(span, Vec::new(), Some(tk))),
-        })
-        .labelled("identifier")
-        .boxed();
+        let identifier = identifier_parser();
 
         let tuple = expr
             .clone()
@@ -266,7 +280,7 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         let compare = parse_with_less_precedence(operators!("==", "!=", "<", "<=", ">", ">="), sum);
         let logic = parse_with_less_precedence(operators!("and", "or"), compare);
 
-        let definition = definition_parser(identifier, expr);
+        let definition = definition_parser(expr);
 
         let comment = filter_map(|span, tk| match &tk {
             Token::Comment(_) => Ok(Ast::Coment((tk, span))),

@@ -1,4 +1,4 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use crate::types::Type;
 use crate::{
@@ -49,41 +49,62 @@ impl Inferer {
         &mut self.env.last_mut().unwrap().0
     }
 
+    fn generate_pattern_constraints(&mut self, (pattern, _, ty): &mut Anotated<Pattern>) {
+        match pattern {
+            Pattern::Var((name_tk, _)) => {
+                let t = Type::T(self.next());
+                *ty = Some(t.clone());
+                self.get_env().insert(name_tk.to_string(), t);
+            }
+            Pattern::Tuple(args) => {
+                let args_t = args
+                    .iter_mut()
+                    .map(|arg| {
+                        self.generate_pattern_constraints(arg);
+                        arg.2.clone().unwrap()
+                    })
+                    .collect();
+                *ty = Some(Type::Tuple(args_t))
+            }
+        }
+    }
+
     pub fn infer(mut self, nodes: &mut Vec<Anotated<Ast>>) -> (Vec<Type>, Vec<(Span, String)>) {
         let declared: Vec<_> = nodes
             .iter_mut()
-            .filter_map(|(node, span, node_ty)| {
-                match node {
-                    Ast::Declaration((name_tk, _), _, ty, _, value) => {
-                        let expected = if let Some(ty) = ty {
-                            if let (Ast::Type(ty), _, _) = ty.as_ref() {
-                                ty.clone()
-                            } else {
-                                self.errors.push((
-                                    span.clone(),
-                                    "This is suposed to be a type".to_string(),
-                                ));
-                                Type::T(self.next())
-                            }
+            .filter_map(|(node, span, node_ty)| match node {
+                Ast::Declaration(pattern, _, ty, _, value) => {
+                    let expected = if let Some(ty) = ty {
+                        if let (Ast::Type(ty), _, _) = ty.as_ref() {
+                            ty.clone()
                         } else {
+                            self.errors
+                                .push((span.clone(), "This is suposed to be a type".to_string()));
                             Type::T(self.next())
-                        };
-                        // The type of the declaration Node is the type of the variable
-                        *node_ty = Some(expected.clone());
-                        self.get_env().insert(name_tk.to_string(), expected.clone());
+                        }
+                    } else {
+                        Type::T(self.next())
+                    };
+                    *node_ty = Some(expected.clone());
 
-                        value
-                            .as_mut()
-                            .map(|value| (expected, value.as_mut(), span.clone()))
-                    }
-                    Ast::Error | Ast::Coment(_) => None,
-                    _ => {
-                        self.errors.push((
-                            span.clone(),
-                            "Only declarations are suported at top level".to_owned(),
-                        ));
-                        None
-                    }
+                    self.generate_pattern_constraints(pattern);
+                    self.constraints.push(Constraint::Eq(
+                        expected.clone(),
+                        pattern.2.clone().unwrap(),
+                        span.clone(),
+                    ));
+
+                    value
+                        .as_mut()
+                        .map(|value| (expected, value.as_mut(), span.clone()))
+                }
+                Ast::Error | Ast::Coment(_) => None,
+                _ => {
+                    self.errors.push((
+                        span.clone(),
+                        "Only declarations are suported at top level".to_owned(),
+                    ));
+                    None
                 }
             })
             .collect();
@@ -298,15 +319,27 @@ impl Inferer {
             }
             // TODO should declarations return the value?
             // TODO need auxiliary function Node to Type = (Ast) -> Option<Type>
-            Ast::Declaration((name_tk, _), _, ty, _, value) => {
-                let expected = if let Some(_ty) = ty {
-                    todo!() // FIXME this should generate the type and use it directly
+            Ast::Declaration(pattern, _, ty, _, value) => {
+                let expected = if let Some(ty) = ty {
+                    if let (Ast::Type(ty), _, _) = ty.as_ref() {
+                        ty.clone()
+                    } else {
+                        self.errors
+                            .push((node.1.clone(), "This is suposed to be a type".to_string()));
+                        Type::T(self.next())
+                    }
                 } else {
                     Type::T(self.next())
                 };
-                // The type of the declaration Node is the type of the variable
                 node.2 = Some(expected.clone());
-                self.get_env().insert(name_tk.to_string(), expected.clone());
+
+                self.generate_pattern_constraints(pattern);
+                self.constraints.push(Constraint::Eq(
+                    expected.clone(),
+                    pattern.2.clone().unwrap(),
+                    node.1.clone(),
+                ));
+
                 if let Some(value) = value {
                     self.generate_constraints(value);
                     self.constraints.push(Constraint::Eq(
@@ -366,6 +399,15 @@ impl Inferer {
                                 substitution_map,
                                 &Constraint::Eq(*ret1.clone(), *ret2.clone(), span.clone()),
                             );
+                        }
+
+                        (Type::Tuple(args1), Type::Tuple(args2)) => {
+                            for (a, b) in args1.iter().zip(args2.iter()) {
+                                self.unify_one(
+                                    substitution_map,
+                                    &Constraint::Eq(a.clone(), b.clone(), span.clone()),
+                                );
+                            }
                         }
                         _ => {
                             return self
