@@ -6,6 +6,8 @@ main := () => {
 	34.add(35)
 } 
 tuple := (df, "hola",12)
+// FIXME this coment is actually necesary because of a parsing bug 
+(a,b,c) := tuple
 df := 12
 
 main : () => Number = () => {

@@ -300,10 +300,6 @@ impl Inferer {
                 let arg_types = args
                     .iter_mut()
                     .map(|arg| {
-                        if let Ast::Variable((name_tk, _)) = &arg.0 {
-                            let t = Type::T(self.next());
-                            self.get_env().insert(name_tk.to_string(), t);
-                        }
                         self.generate_constraints(arg);
                         arg.2.clone().unwrap()
                     })

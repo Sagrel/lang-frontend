@@ -4,6 +4,9 @@ tuple := (69, "Hello word!")
 tuple : (Number, Text) = (69, "Hello word!")
 tuple : (Number, Text)
 
-(a,b) := (69, "Hello word!")
+add := ((a,b)) => {a+b}
+main := () => { (35, 34).add }
+//(a,b) := (69, "Hello word!") FIXME NEED \n as a ; to stop this from beeing considered a function call. That or making shure that the '(' is the next caracter from the function caller so spaces are not allowed making this "add (2+4)" not a function call
+(c,d) := (420, () => { "Hello word!" })
 //(a,b) : (Number, Text) = (69, "Hello word!")
 //(a,b) : (Number, Text)

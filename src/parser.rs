@@ -75,7 +75,7 @@ fn pattern_parser() -> impl Parser<Token, Anotated<Pattern>, Error = Simple<Toke
     })
 }
 
-fn definition_parser(
+fn declaration_parser(
     expresion: impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> + Clone,
 ) -> impl Parser<Token, Anotated<Ast>, Error = Simple<Token>> {
     let only_type = pattern_parser()
@@ -192,17 +192,21 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         .boxed();
 
         // TODO change this so it only parses declarations or identifiers as args
-        let lambda = tuple
-            .clone()
+        let lambda = declaration_parser(expr.clone())
+            .or(pattern_parser().map(|pattern| {
+                let span = pattern.1.clone();
+                (
+                    // HACK We are generating an imaginary token that does not exist, that might be bad
+                    Ast::Declaration(pattern, (Token::Ctrl(':'), span.clone()), None, None, None),
+                    span,
+                    None,
+                )
+            }))
+            .separated_by(just(Token::Ctrl(',')))
+            .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
             .then(just(Token::Op("=>".to_string())).map_with_span(|tk, span| (tk, span)))
             .then(block.clone())
-            .map(|((args, arrow_tk), body)| {
-                if let Ast::Tuple(args) = args {
-                    Ast::Lambda(args, arrow_tk, Box::new(body))
-                } else {
-                    Ast::Error
-                }
-            })
+            .map(|((args, arrow_tk), body)| Ast::Lambda(args, arrow_tk, Box::new(body)))
             .boxed();
 
         // ATOMS ARE NOT AMBIGUOUS
@@ -210,7 +214,7 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         // 2 + 3 * 3 IS NOT AN ATOM BECAUSE OF OPERATOR PRECEDENCE
 
         let atom = lit
-            .or(identifier.clone().map(Ast::Variable))
+            .or(identifier.map(Ast::Variable))
             .or(lambda)
             .or(while_)
             .map_with_span(|expr, span| (expr, span, None))
@@ -280,7 +284,7 @@ pub fn expresion_parser() -> impl Parser<Token, Anotated<Ast>, Error = Simple<To
         let compare = parse_with_less_precedence(operators!("==", "!=", "<", "<=", ">", ">="), sum);
         let logic = parse_with_less_precedence(operators!("and", "or"), compare);
 
-        let definition = definition_parser(expr);
+        let definition = declaration_parser(expr);
 
         let comment = filter_map(|span, tk| match &tk {
             Token::Comment(_) => Ok(Ast::Coment((tk, span))),
